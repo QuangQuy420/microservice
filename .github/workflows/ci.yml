@@ -1,0 +1,372 @@
+name: CI
+
+# Lint + build + test (+ Docker image build, no push) for every service:
+# api-gateway, product-service, web, face-processing-service, recommendation-service,
+# order-service (FastAPI), payment-service, and user-service (Django).
+#
+# user-service and order-service test suites run without external infra (sqlite /
+# fakeredis / mocked broker), so their jobs need no service containers.
+#
+# Each service's job is path-filtered (via dorny/paths-filter) so it only runs when its
+# own folder changes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      product-service: ${{ steps.filter.outputs.product-service }}
+      web: ${{ steps.filter.outputs.web }}
+      face-processing-service: ${{ steps.filter.outputs.face-processing-service }}
+      recommendation-service: ${{ steps.filter.outputs.recommendation-service }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      payment-service: ${{ steps.filter.outputs.payment-service }}
+      user-service: ${{ steps.filter.outputs.user-service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'api-gateway/**'
+            product-service:
+              - 'product-service/**'
+            web:
+              - 'web/**'
+            face-processing-service:
+              - 'face-processing-service/**'
+            recommendation-service:
+              - 'recommendation-service/**'
+            order-service:
+              - 'order-service/**'
+            payment-service:
+              - 'payment-service/**'
+            user-service:
+              - 'user-service/**'
+
+  api-gateway:
+    name: api-gateway
+    needs: changes
+    if: needs.changes.outputs.api-gateway == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: api-gateway/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: api-gateway
+          push: false
+          tags: smart-eyewear/api-gateway:ci
+
+  product-service:
+    name: product-service
+    needs: changes
+    if: needs.changes.outputs.product-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: product-service
+    # Real Postgres service container so `test:e2e` (which needs a live DB — its Jest
+    # globalSetup runs real migrations + fixtures, see test/global-setup.ts) can run in
+    # CI too, not just the `test` unit suite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: product_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # RabbitMqProductEventPublisher (event-bus POC) requires RABBITMQ_URL to even boot
+      # the app, same as Postgres/MinIO below — unlike minio/minio, this image needs no
+      # custom CMD, so a plain `services:` entry works (matching infra/docker-compose.yml).
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/product_db
+      RABBITMQ_URL: amqp://guest:guest@localhost:5672
+      # S3ImageStorageRepository (admin image upload) requires these to even boot the
+      # app — see MinIO container step below (GH Actions `services:` can't override a
+      # container's CMD, which `minio/minio` needs, so it's started as a plain `docker
+      # run` step instead of a `services:` entry, matching infra/docker-compose.yml's
+      # dev defaults).
+      MINIO_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_PRODUCT_IMAGES: product-images
+      MINIO_PUBLIC_URL: http://localhost:9000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: product-service/package-lock.json
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data --console-address ":9001"
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break
+            sleep 2
+          done
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: product-service
+          push: false
+          tags: smart-eyewear/product-service:ci
+
+  web:
+    name: web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: false
+          tags: smart-eyewear/web:ci
+
+  face-processing-service:
+    name: face-processing-service
+    needs: changes
+    if: needs.changes.outputs.face-processing-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: face-processing-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: face-processing-service/requirements.txt
+
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: face-processing-service
+          push: false
+          tags: smart-eyewear/face-processing-service:ci
+
+  recommendation-service:
+    name: recommendation-service
+    needs: changes
+    if: needs.changes.outputs.recommendation-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: recommendation-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: recommendation-service/requirements.txt
+
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: recommendation-service
+          push: false
+          tags: smart-eyewear/recommendation-service:ci
+
+  order-service:
+    name: order-service
+    needs: changes
+    if: needs.changes.outputs.order-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: order-service
+    # FastAPI rewrite: the pytest suite runs against sqlite/fakeredis with a mocked
+    # broker and product client, so no service containers are needed.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: order-service/requirements.txt
+
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: order-service
+          push: false
+          tags: smart-eyewear/order-service:ci
+
+  user-service:
+    name: user-service
+    needs: changes
+    if: needs.changes.outputs.user-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: user-service
+    # Django rewrite: tests run against sqlite, so no service containers are needed.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: user-service/requirements.txt
+
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: user-service
+          push: false
+          tags: smart-eyewear/user-service:ci
+
+  payment-service:
+    name: payment-service
+    needs: changes
+    if: needs.changes.outputs.payment-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: payment-service
+    # Real Postgres + RabbitMQ service containers, same shape as product-service's job — this
+    # service needs a live DB (TypeORM migrations via entrypoint.sh) and broker (RabbitMqOrder
+    # SagaEventConsumer/Publisher require RABBITMQ_URL to even boot the app) to build/test.
+    # No MinIO: payment-service touches no object storage.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: payment_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/payment_db
+      RABBITMQ_URL: amqp://guest:guest@localhost:5672
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: payment-service/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: payment-service
+          push: false
+          tags: smart-eyewear/payment-service:ci

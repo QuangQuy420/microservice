@@ -1,0 +1,676 @@
+openapi: 3.0.3
+info:
+  title: product-service
+  description: >
+    Catalog service — brands, categories, products, variants, images.
+    Code-first contract (see infra/docs/adr/0001-contract-sharing-mechanism.md and the
+    Sprint 1 plan's Q7): written from the real NestJS implementation in
+    `product-service/src`, not the other way around. Documents GET/POST/PATCH/DELETE
+    /products, POST /products/:id/images, GET /categories, GET /brands, GET /health
+    (admin product management pass, see .planning/2026-07-11-admin-product-management.md).
+    Face shapes are stored as a product enum array; variant stock is stored on the variant.
+  version: "0.2.0"
+servers:
+  - url: http://localhost:3002
+    description: product-service, direct (local dev only)
+  - url: http://localhost:8080/api
+    description: via api-gateway (same shapes, `/api` prefix — see api-gateway proxy)
+
+# No auth on any endpoint today — edge JWT verification is deferred (see the Sprint 1
+# plan's Q3); these routes are proxied/served unauthenticated for now.
+security: []
+
+tags:
+  - name: products
+  - name: categories
+  - name: brands
+  - name: health
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness check
+      description: Plain endpoint, no auth, no downstream calls.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                required: [status]
+
+  /products:
+    get:
+      tags: [products]
+      summary: List products (filter + paginate)
+      operationId: listProducts
+      parameters:
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: brandId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: frameShape
+          in: query
+          schema:
+            $ref: "#/components/schemas/FrameShape"
+        - name: genderTarget
+          in: query
+          schema:
+            $ref: "#/components/schemas/GenderTarget"
+        - name: faceShape
+          in: query
+          description: >
+            Filters to products whose `faceShapes` array includes this face shape.
+          schema:
+            $ref: "#/components/schemas/FaceShape"
+        - name: status
+          in: query
+          description: >
+            Defaults to `PUBLISHED` server-side when omitted (unless `includeAllStatuses`
+            is set).
+          schema:
+            $ref: "#/components/schemas/ProductStatus"
+        - name: includeAllStatuses
+          in: query
+          description: >
+            Admin-only escape hatch (AC1): when `true` and `status` is not given, skips
+            the default `status = PUBLISHED` filter and returns products in any status.
+            Ignored if `status` is set. Public storefront behavior (default-to-PUBLISHED)
+            is unchanged when this is omitted.
+          schema:
+            type: boolean
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            exclusiveMinimum: true
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            exclusiveMinimum: true
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Paginated list of products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProductResponse"
+        "400":
+          description: Invalid query parameters (validation failure)
+
+    post:
+      tags: [products]
+      summary: Create a product (admin)
+      description: >
+        `slug` and `sku` are auto-generated server-side from `name` (never supplied by
+        the caller). `status` defaults to `PUBLISHED` when omitted (not the DB's own
+        `DRAFT` default) since the admin UI's toggle only ever represents
+        published/archived.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "400":
+          description: >
+            Validation failure, or `categoryId`/`brandId` does not reference an
+            existing row.
+
+  /products/{id}:
+    get:
+      tags: [products]
+      summary: Get a single product by id
+      operationId: getProductById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "404":
+          description: Product not found
+
+    patch:
+      tags: [products]
+      summary: Update a product (admin)
+      description: >
+        Partial update — only fields present in the body are changed. If `faceShapes`
+        is included, it replaces the product's full face-shape tag set.
+      operationId: updateProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "400":
+          description: >
+            Validation failure, or `categoryId`/`brandId` does not reference an
+            existing row.
+        "404":
+          description: Product not found
+
+    delete:
+      tags: [products]
+      summary: Soft-delete a product (admin)
+      description: >
+        Sets `deleted_at` (TypeORM soft delete) — never a hard delete. The row is
+        excluded from all subsequent list/detail queries once deleted.
+      operationId: deleteProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Product soft-deleted
+        "404":
+          description: Product not found
+
+  /products/{id}/images:
+    post:
+      tags: [products]
+      summary: Upload a product or variant image (admin)
+      description: >
+        Multipart upload. Appends to the image list rather than replacing anything —
+        `sortOrder` is the current max within the target group + 1. Omitting `variantId`
+        attaches the image to the base product (max 8 images); passing a `variantId`
+        attaches it to that variant instead (max 5 images), and the variant must belong
+        to this product. A newly uploaded image never starts as the thumbnail — the
+        admin sets it explicitly via `PATCH .../images/{imageId}`.
+        Rejects anything that isn't `image/jpeg`, `image/png`, or `image/webp`, or is
+        over 5 MB, with a 400 (server-side check, not just a client-side hint).
+      operationId: uploadProductImage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                variantId:
+                  type: string
+                  format: uuid
+                  description: Omit to attach the image to the base product.
+              required: [file]
+      responses:
+        "201":
+          description: Image uploaded and attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductImageResponse"
+        "400":
+          description: >
+            Missing file, disallowed content type, file over 5 MB, `variantId` not
+            belonging to this product, or the group's image count limit (8 for the
+            product, 5 for a variant) already reached.
+        "404":
+          description: Product not found
+
+  /products/{id}/images/{imageId}:
+    patch:
+      tags: [products]
+      summary: Set an image as the thumbnail of its group (admin)
+      description: >
+        Marks `imageId` as the thumbnail and unsets any other thumbnail within the same
+        group (the base product's own images, or a specific variant's images).
+      operationId: setProductImageThumbnail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isThumbnail:
+                  type: boolean
+                  enum: [true]
+              required: [isThumbnail]
+      responses:
+        "200":
+          description: Image updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductImageResponse"
+        "400":
+          description: "`isThumbnail` was not `true`."
+        "404":
+          description: Image not found, or it doesn't belong to this product.
+    delete:
+      tags: [products]
+      summary: Delete a product or variant image (admin)
+      operationId: deleteProductImage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Image deleted
+        "404":
+          description: Image not found, or it doesn't belong to this product.
+
+  /categories:
+    get:
+      tags: [categories]
+      summary: List all categories
+      operationId: listCategories
+      responses:
+        "200":
+          description: Flat list of categories (self-referential via parentId)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryResponse"
+
+  /brands:
+    get:
+      tags: [brands]
+      summary: List all brands
+      operationId: listBrands
+      responses:
+        "200":
+          description: Flat list of brands
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BrandResponse"
+
+components:
+  schemas:
+    FrameShape:
+      type: string
+      enum: [ROUND, SQUARE, OVAL, CAT_EYE, AVIATOR, RECTANGLE, WAYFARER, RIMLESS]
+
+    GenderTarget:
+      type: string
+      enum: [MALE, FEMALE, UNISEX]
+
+    ProductStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, ARCHIVED]
+
+    FaceShape:
+      type: string
+      description: >
+        Which face shapes a product suits (FR7).
+      enum: [ROUND, SQUARE, OVAL, HEART, DIAMOND, OBLONG]
+
+    BrandSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+      required: [id, name, logoUrl]
+
+    BrandResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+      required: [id, name, logoUrl]
+
+    CategorySummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+      required: [id, name, slug]
+
+    CategoryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [id, name, slug, parentId]
+
+    ProductVariantResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        color:
+          type: string
+        colorHex:
+          type: string
+          nullable: true
+          description: >
+            Hex color code (e.g. `#E53935`), or `null` for a legacy variant created
+            before the color picker was added.
+        size:
+          type: string
+        extraPrice:
+          type: number
+        skuVariant:
+          type: string
+        stock:
+          type: integer
+          description: >
+            Available stock (`quantity - reservedQuantity`). Present only in
+            `GET /products/:id`; omitted from catalog listing responses.
+      required: [id, color, colorHex, size, extraPrice, skuVariant]
+
+    ProductImageResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+          nullable: true
+        imageUrl:
+          type: string
+        isThumbnail:
+          type: boolean
+        sortOrder:
+          type: integer
+      required: [id, variantId, imageUrl, isThumbnail, sortOrder]
+
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        faceFitNote:
+          type: string
+          nullable: true
+          description: Free-text note on which faces this product fits well (FR7).
+        frameShape:
+          $ref: "#/components/schemas/FrameShape"
+        genderTarget:
+          $ref: "#/components/schemas/GenderTarget"
+        material:
+          type: string
+          nullable: true
+        basePrice:
+          type: number
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        brand:
+          $ref: "#/components/schemas/BrandSummary"
+        category:
+          $ref: "#/components/schemas/CategorySummary"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVariantResponse"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImageResponse"
+        faceShapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FaceShape"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sku
+        - name
+        - slug
+        - description
+        - faceFitNote
+        - frameShape
+        - genderTarget
+        - material
+        - basePrice
+        - status
+        - brand
+        - category
+        - variants
+        - images
+        - faceShapes
+        - createdAt
+        - updatedAt
+
+    CreateProductRequest:
+      type: object
+      description: >
+        `sku`/`slug` are never accepted here — they're auto-generated server-side
+        (Q1). `status` is optional; defaults to `PUBLISHED` if omitted.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        categoryId:
+          type: string
+          format: uuid
+        brandId:
+          type: string
+          format: uuid
+        frameShape:
+          $ref: "#/components/schemas/FrameShape"
+        genderTarget:
+          $ref: "#/components/schemas/GenderTarget"
+        material:
+          type: string
+          nullable: true
+        basePrice:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+        description:
+          type: string
+          nullable: true
+        faceFitNote:
+          type: string
+          nullable: true
+        faceShapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FaceShape"
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+      required:
+        - name
+        - categoryId
+        - brandId
+        - frameShape
+        - genderTarget
+        - basePrice
+
+    UpdateProductRequest:
+      type: object
+      description: Partial update — every field from CreateProductRequest is optional.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        categoryId:
+          type: string
+          format: uuid
+        brandId:
+          type: string
+          format: uuid
+        frameShape:
+          $ref: "#/components/schemas/FrameShape"
+        genderTarget:
+          $ref: "#/components/schemas/GenderTarget"
+        material:
+          type: string
+          nullable: true
+        basePrice:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+        description:
+          type: string
+          nullable: true
+        faceFitNote:
+          type: string
+          nullable: true
+        faceShapes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FaceShape"
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+
+    PaginatedProductResponse:
+      type: object
+      description: >
+        Flat pagination envelope (NOT a nested data/meta shape) — see
+        product-service/src/routes/dto/paginated-response.dto.ts.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductResponse"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+      required: [items, total, page, limit, totalPages]

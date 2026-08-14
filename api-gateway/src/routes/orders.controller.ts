@@ -1,0 +1,252 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Request } from 'express';
+import { AuthenticatedUser, JwtGuard } from '../auth/jwt.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
+import { OrdersProxyService } from '../services/orders-proxy.service';
+import { UpdateSagaSettingsDto } from './dto/update-saga-settings.dto';
+
+/**
+ * Thin controller: parses the incoming request and delegates to
+ * `OrdersProxyService` — no forwarding/HTTP logic here. Every route is
+ * self-service (a user only ever acts on their own cart), so `userId` is
+ * always taken from the verified JWT (`request.user.userId`), never from a
+ * client-supplied path or body field.
+ */
+@Controller('api/cart')
+export class CartController {
+  constructor(private readonly ordersProxyService: OrdersProxyService) {}
+
+  @Get()
+  @UseGuards(JwtGuard)
+  getCart(@Req() request: Request & { user: AuthenticatedUser }): Promise<unknown> {
+    return this.ordersProxyService.getCart(request.user.userId);
+  }
+
+  @Post('items')
+  @UseGuards(JwtGuard)
+  addItem(
+    @Body() body: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.addCartItem(request.user.userId, body);
+  }
+
+  @Put('items/:variantId')
+  @UseGuards(JwtGuard)
+  updateItem(
+    @Param('variantId') variantId: string,
+    @Body() body: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.updateCartItem(
+      request.user.userId,
+      variantId,
+      body,
+    );
+  }
+
+  @Delete('items/:variantId')
+  @UseGuards(JwtGuard)
+  removeItem(
+    @Param('variantId') variantId: string,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.removeCartItem(
+      request.user.userId,
+      variantId,
+    );
+  }
+
+  @Delete()
+  @UseGuards(JwtGuard)
+  clearCart(@Req() request: Request & { user: AuthenticatedUser }): Promise<unknown> {
+    return this.ordersProxyService.clearCart(request.user.userId);
+  }
+}
+
+@Controller('api/orders')
+export class OrdersController {
+  constructor(private readonly ordersProxyService: OrdersProxyService) {}
+
+  @Post('checkout')
+  @UseGuards(JwtGuard)
+  checkout(
+    @Body() body: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.checkout(request.user.userId, body);
+  }
+
+  @Get()
+  @UseGuards(JwtGuard)
+  findAll(
+    @Query() query: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.getOrders(request.user.userId, query);
+  }
+
+  @Get(':id')
+  @UseGuards(JwtGuard)
+  findOne(
+    @Param('id') id: string,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.getOrderDetail(request.user.userId, id);
+  }
+
+  @Post(':id/cancel')
+  @UseGuards(JwtGuard)
+  cancel(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.cancelOrder(request.user.userId, id, body);
+  }
+}
+
+/**
+ * Thin controller: parses the incoming request and delegates to
+ * `OrdersProxyService` — no forwarding/HTTP logic here. Proxies
+ * order-service's `/api/v1/admin/orders` routes, which return/act on ANY
+ * order regardless of owner (unlike `OrdersController` above, which is
+ * self-service). Every route requires the caller to currently hold
+ * `order:manage` (checked live against user-service, see
+ * `PermissionsGuard`).
+ *
+ * Route order matters: `summary` must be declared before `:id` — NestJS
+ * matches routes in registration order, and a literal `/summary` request
+ * would otherwise be swallowed by the `:id` pattern (`id="summary"`, which
+ * order-service can't parse as a UUID).
+ */
+@Controller('api/admin/orders')
+export class AdminOrdersController {
+  constructor(private readonly ordersProxyService: OrdersProxyService) {}
+
+  @Get()
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  findAll(@Query() query: Record<string, unknown>): Promise<unknown> {
+    return this.ordersProxyService.getAdminOrders(query);
+  }
+
+  @Get('summary')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  summary(): Promise<unknown> {
+    return this.ordersProxyService.getAdminOrdersSummary();
+  }
+
+  @Get(':id')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  findOne(@Param('id') id: string): Promise<unknown> {
+    return this.ordersProxyService.getAdminOrderDetail(id);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.updateOrderStatusAdmin(
+      id,
+      request.user.userId,
+      body,
+    );
+  }
+}
+
+/**
+ * Thin controller: parses the incoming request and delegates to
+ * `OrdersProxyService` — no forwarding/HTTP logic here. Proxies
+ * order-service's `/api/v1/admin/saga-logs` routes (checkout saga audit
+ * trail), same "any order regardless of owner" + `order:manage` convention
+ * as `AdminOrdersController` above.
+ */
+@Controller('api/admin/saga-logs')
+export class AdminSagaLogsController {
+  constructor(private readonly ordersProxyService: OrdersProxyService) {}
+
+  @Get('days')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  getDays(): Promise<unknown> {
+    return this.ordersProxyService.getSagaLogDays();
+  }
+
+  @Get('days/:date')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  getOrdersForDay(@Param('date') date: string): Promise<unknown> {
+    return this.ordersProxyService.getSagaLogsForDay(date);
+  }
+
+  @Get('orders/:orderId')
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('order:manage')
+  getOrderLogs(@Param('orderId') orderId: string): Promise<unknown> {
+    return this.ordersProxyService.getOrderSagaLogs(orderId);
+  }
+}
+
+/**
+ * Thin controller: parses the incoming request and delegates to
+ * `OrdersProxyService` — no forwarding/HTTP logic here. Proxies
+ * order-service's `/api/v1/admin/saga-settings` routes (the checkout saga
+ * reconciliation job's live retry config), same "no in-service permission
+ * guard, trusts the gateway" convention as `AdminSagaLogsController` above,
+ * but gated by its own `saga-settings:manage` permission rather than
+ * `order:manage`.
+ */
+@Controller('api/admin/saga-settings')
+export class AdminSagaSettingsController {
+  constructor(private readonly ordersProxyService: OrdersProxyService) {}
+
+  @Get()
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('saga-settings:manage')
+  getSettings(): Promise<unknown> {
+    return this.ordersProxyService.getSagaSettings();
+  }
+
+  @Put()
+  @UseGuards(JwtGuard, PermissionsGuard)
+  @RequirePermission('saga-settings:manage')
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
+  updateSettings(
+    @Body() body: UpdateSagaSettingsDto,
+    @Req() request: Request & { user: AuthenticatedUser },
+  ): Promise<unknown> {
+    return this.ordersProxyService.updateSagaSettings(
+      body,
+      request.user.userId,
+    );
+  }
+}

@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+vendor/
+target/
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local-only Compose overrides (auto-loaded by `docker compose up`, machine-specific)
+docker-compose.override.yml
+
+# Test / coverage
+coverage/
+.pytest_cache/

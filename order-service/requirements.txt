@@ -1,0 +1,16 @@
+# Runtime
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+SQLAlchemy==2.0.52
+alembic==1.19.1
+psycopg[binary]==3.3.4
+redis==8.1.0
+aio-pika==10.0.1
+httpx==0.28.1
+simplejson==4.1.1
+python-dotenv==1.2.2
+
+# Tests
+pytest==9.1.1
+fakeredis==2.37.0

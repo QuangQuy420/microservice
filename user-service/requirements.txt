@@ -1,0 +1,9 @@
+# Runtime dependencies (pinned). Tested on Python 3.13 (Docker) and 3.14 (local).
+asgiref==3.12.1
+bcrypt==5.0.0
+Django==6.0.8
+djangorestframework==3.18.0
+gunicorn==26.0.0
+psycopg[binary]==3.3.4
+PyJWT==2.13.0
+sqlparse==0.5.5
