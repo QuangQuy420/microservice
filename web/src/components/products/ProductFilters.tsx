@@ -3,6 +3,18 @@ import { formatFrameShapeVi } from "@/lib/labels";
 import type { Category } from "@/types/category";
 import type { Brand, FrameShape } from "@/types/product";
 
+const PANEL_CLASS =
+  "absolute top-[calc(100%_+_0.5rem)] left-0 z-10 flex w-[min(900px,calc(100vw_-_2rem))] flex-wrap " +
+  "items-end gap-4 rounded-lg border border-border bg-surface p-5 shadow-[0_10px_24px_rgb(0_0_0_/_15%)]";
+
+const FIELD_CLASS = "m-0 grid flex-[1_1_180px] gap-[0.45rem] text-[0.9rem] font-semibold text-text";
+
+// The label above owns the bold weight; the control itself stays regular. Not the shared .input
+// class — these selects have no focus ring and a tighter radius than the form-page fields.
+const SELECT_CLASS =
+  "w-full rounded-[0.4rem] border border-border bg-surface px-[0.8rem] py-[0.7rem] font-body " +
+  "text-[0.9rem] font-normal text-text";
+
 interface PriceRange {
   label: string;
   minPrice?: number;
@@ -85,10 +97,10 @@ export function ProductFilters({
   }
 
   return (
-    <div className="product-filters">
+    <div className="relative mb-6">
       <button
         type="button"
-        className="product-filters__trigger"
+        className="inline-flex cursor-pointer items-center gap-[0.45rem] rounded-full border border-text bg-surface px-4 py-[0.65rem] font-body text-[0.9rem] font-semibold text-text"
         aria-expanded={isOpen}
         aria-controls="product-filter-panel"
         onClick={openFilters}
@@ -112,15 +124,15 @@ export function ProductFilters({
       {isOpen && (
         <section
           id="product-filter-panel"
-          className="product-filters__panel"
+          className={PANEL_CLASS}
           role="dialog"
           aria-labelledby="product-filter-heading"
         >
-          <div className="product-filters__header">
-            <h2 id="product-filter-heading">Filter</h2>
+          <div className="flex flex-[0_0_100%] items-center justify-between gap-4">
+            <h2 id="product-filter-heading" className="text-[1.35rem] font-bold">Filter</h2>
             <button
               type="button"
-              className="product-filters__close"
+              className="h-8 w-8 cursor-pointer border-0 bg-transparent p-0 font-body text-[1.75rem] leading-none text-text"
               onClick={() => setIsOpen(false)}
               aria-label="Đóng bộ lọc"
             >
@@ -128,10 +140,11 @@ export function ProductFilters({
             </button>
           </div>
 
-          <label className="product-filters__field" htmlFor="filter-brand">
+          <label className={FIELD_CLASS} htmlFor="filter-brand">
               <span>Thương hiệu</span>
               <select
                 id="filter-brand"
+                className={SELECT_CLASS}
                 value={draftFilters.brandId ?? ""}
                 onChange={(event) =>
                   setDraftFilters((current) => ({
@@ -147,10 +160,11 @@ export function ProductFilters({
               </select>
           </label>
 
-          <label className="product-filters__field" htmlFor="filter-category">
+          <label className={FIELD_CLASS} htmlFor="filter-category">
               <span>Danh mục</span>
               <select
                 id="filter-category"
+                className={SELECT_CLASS}
                 value={draftFilters.categoryId ?? ""}
                 onChange={(event) =>
                   setDraftFilters((current) => ({
@@ -166,10 +180,11 @@ export function ProductFilters({
               </select>
           </label>
 
-          <label className="product-filters__field" htmlFor="filter-frame-shape">
+          <label className={FIELD_CLASS} htmlFor="filter-frame-shape">
               <span>Dáng gọng</span>
               <select
                 id="filter-frame-shape"
+                className={SELECT_CLASS}
                 value={draftFilters.frameShape ?? ""}
                 onChange={(event) =>
                   setDraftFilters((current) => ({
@@ -185,10 +200,11 @@ export function ProductFilters({
               </select>
           </label>
 
-          <label className="product-filters__field" htmlFor="filter-price">
+          <label className={FIELD_CLASS} htmlFor="filter-price">
               <span>Giá tiền</span>
               <select
                 id="filter-price"
+                className={SELECT_CLASS}
                 value={PRICE_RANGES.findIndex((range) =>
                   isActivePriceRange(range, draftFilters.minPrice, draftFilters.maxPrice),
                 ).toString()}
@@ -208,11 +224,11 @@ export function ProductFilters({
               </select>
           </label>
 
-          <div className="product-filters__actions">
-            <button type="button" className="btn btn--outline" onClick={clearFilters}>
+          <div className="mt-2 flex flex-[0_0_100%] items-center justify-between gap-4">
+            <button type="button" className="btn btn-outline" onClick={clearFilters}>
               Xóa bộ lọc
             </button>
-            <button type="button" className="btn btn--primary" onClick={applyFilters}>
+            <button type="button" className="btn btn-primary" onClick={applyFilters}>
               Xong
             </button>
           </div>

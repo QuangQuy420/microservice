@@ -116,31 +116,36 @@ export function ProductListPage() {
 
   return (
     <>
-      <section className="hero">
-        <div className="hero__content">
-          <p className="hero__eyebrow">Bộ sưu tập kính mắt</p>
-          <h1 id="catalog-heading" className="hero__title">
+      <section className="flex flex-wrap items-center gap-10 pt-6 pb-10">
+        <div className="min-w-[280px] flex-[1_1_380px]">
+          <p className="mb-[0.9rem] text-[0.8rem] font-semibold tracking-[0.12em] text-text-muted uppercase">
+            Bộ sưu tập kính mắt
+          </p>
+          <h1
+            id="catalog-heading"
+            className="mb-[1.1rem] font-heading text-[clamp(1.9rem,4vw,3rem)] leading-[1.15] font-semibold"
+          >
             Tìm gọng kính
             <br />
             phù hợp với khuôn mặt bạn
           </h1>
-          <p className="hero__subtext">
+          <p className="mb-7 max-w-[460px] text-base leading-[1.6] text-text-secondary">
             Tải lên 1 ảnh chân dung, chúng tôi sẽ phân tích dáng khuôn mặt của bạn và gợi ý những
             gọng kính phù hợp nhất — sau đó thử ngay trên trình duyệt trước khi mua.
           </p>
-          <Link href="/face-analysis" className="btn btn--primary">
+          <Link href="/face-analysis" className="btn btn-primary">
             Bắt đầu phân tích khuôn mặt
           </Link>
         </div>
-        <div className="hero__visual">
+        <div className="aspect-[4/3] min-w-[220px] flex-[1_1_320px] overflow-hidden rounded-[6px] bg-[#ede6d8]">
           <HeroCarousel />
         </div>
       </section>
 
       <section aria-labelledby="catalog-heading">
-        <div className="search-field">
+        <div className="relative mt-2 mb-5 max-w-[420px]">
           <svg
-            className="search-field__icon"
+            className="pointer-events-none absolute top-1/2 left-[14px] -translate-y-1/2 text-text-muted"
             width="16"
             height="16"
             viewBox="0 0 24 24"
@@ -154,7 +159,7 @@ export function ProductListPage() {
           </svg>
           <input
             type="search"
-            className="search-input"
+            className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
             aria-label="Tìm sản phẩm"
             placeholder="Tìm theo tên hoặc kiểu gọng kính"
             value={searchInput}

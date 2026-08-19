@@ -8,7 +8,7 @@ describe("ImageWithFallback", () => {
         src="/broken.jpg"
         alt="Aviator Classic"
         className="thumb"
-        placeholderClassName="thumb thumb--placeholder"
+        placeholderClassName="thumb thumb-placeholder"
       />,
     );
 
@@ -24,7 +24,7 @@ describe("ImageWithFallback", () => {
         src="/broken.jpg"
         alt="Aviator Classic"
         className="thumb"
-        placeholderClassName="thumb thumb--placeholder"
+        placeholderClassName="thumb thumb-placeholder"
       />,
     );
 
@@ -32,6 +32,6 @@ describe("ImageWithFallback", () => {
 
     const placeholder = screen.getByRole("img", { name: "Aviator Classic" });
     expect(placeholder.tagName).toBe("DIV");
-    expect(placeholder).toHaveClass("thumb--placeholder");
+    expect(placeholder).toHaveClass("thumb-placeholder");
   });
 });

@@ -4,7 +4,7 @@ interface ErrorStateProps {
 
 export function ErrorState({ message }: ErrorStateProps) {
   return (
-    <p role="alert" className="error-state">
+    <p role="alert" className="my-[1em] text-[#a92828]">
       {message}
     </p>
   );

@@ -5,6 +5,23 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { resetPassword, ApiError } from "@/lib/api";
 
+// The auth screens share one field/submit look; `.input` (globals.css) carries the common
+// border/focus ring, the extras here are the auth-only deltas (taller box, rounder corners,
+// warmer fill). `motion-reduce:` replaces the old global prefers-reduced-motion override.
+const LABEL_CLASS = "flex flex-col gap-[0.4rem] text-[0.82rem] font-[650] text-text-secondary";
+
+const INPUT_CLASS =
+    "input min-h-[46px] rounded-[10px] bg-[#fffdf9] px-[0.85rem] py-[0.72rem] text-[0.92rem] " +
+    "motion-reduce:transition-none";
+
+const SUBMIT_CLASS =
+    "mt-1 min-h-[46px] cursor-pointer rounded-[10px] border border-text bg-text px-4 py-3 " +
+    "font-body text-[0.9rem] font-bold text-surface " +
+    "transition-[background-color,translate,box-shadow] duration-200 ease-in-out " +
+    "enabled:hover:-translate-y-px enabled:hover:border-accent-dark enabled:hover:bg-accent-dark " +
+    "enabled:hover:shadow-[0_10px_22px_rgba(43,36,32,0.14)] " +
+    "disabled:cursor-not-allowed disabled:opacity-[0.58] motion-reduce:transition-none";
+
 export default function ResetPasswordPage() {
     return (
         <Suspense fallback={null}>
@@ -77,29 +94,30 @@ function ResetPasswordForm() {
     }
 
     return (
-        <main className="auth-page">
-            <section className="auth-card">
-                <p className="auth-card__eyebrow">
+        <main className="mx-auto grid min-h-[calc(100vh-190px)] max-w-[1100px] place-items-center px-6 py-[clamp(2rem,6vw,4.5rem)] max-sm:px-4">
+            <section className="w-[min(100%,450px)] rounded-[18px] border border-border bg-surface p-[clamp(1.4rem,4vw,2.25rem)] shadow-[0_22px_55px_rgba(43,36,32,0.09)]">
+                <p className="mb-[0.55rem] text-[0.76rem] font-bold tracking-[0.11em] text-accent-dark uppercase">
                     Bảo mật tài khoản
                 </p>
 
-                <h1 className="auth-card__title">
+                <h1 className="mb-[0.6rem] font-heading text-[clamp(1.7rem,4vw,2.25rem)] font-[650]">
                     Đặt lại mật khẩu
                 </h1>
 
-                <p className="auth-card__subtitle">
+                <p className="mb-6 text-[0.92rem] leading-[1.6] text-text-secondary">
                     Nhập mã đặt lại mật khẩu và mật khẩu mới.
                 </p>
 
                 <form
-                    className="auth-form"
+                    className="flex w-full flex-col gap-4"
                     onSubmit={handleSubmit}
                     noValidate
                 >
-                    <label htmlFor="reset-token">
+                    <label htmlFor="reset-token" className={LABEL_CLASS}>
                         Mã đặt lại mật khẩu
                         <input
                             id="reset-token"
+                            className={INPUT_CLASS}
                             type="text"
                             value={token}
                             onChange={(event) =>
@@ -109,10 +127,11 @@ function ResetPasswordForm() {
                         />
                     </label>
 
-                    <label htmlFor="reset-new-password">
+                    <label htmlFor="reset-new-password" className={LABEL_CLASS}>
                         Mật khẩu mới
                         <input
                             id="reset-new-password"
+                            className={INPUT_CLASS}
                             type="password"
                             value={newPassword}
                             onChange={(event) =>
@@ -123,10 +142,11 @@ function ResetPasswordForm() {
                         />
                     </label>
 
-                    <label htmlFor="reset-confirm-password">
+                    <label htmlFor="reset-confirm-password" className={LABEL_CLASS}>
                         Xác nhận mật khẩu mới
                         <input
                             id="reset-confirm-password"
+                            className={INPUT_CLASS}
                             type="password"
                             value={confirmPassword}
                             onChange={(event) =>
@@ -137,25 +157,25 @@ function ResetPasswordForm() {
                         />
                     </label>
 
-                    <button type="submit" disabled={submitting}>
+                    <button type="submit" className={SUBMIT_CLASS} disabled={submitting}>
                         {submitting
                             ? "Đang cập nhật..."
                             : "Đặt lại mật khẩu"}
                     </button>
 
                     {message && (
-                        <p role="status">{message}</p>
+                        <p role="status" className="text-[0.84rem] text-[#3d6654]">{message}</p>
                     )}
 
                     {error && (
-                        <p role="alert" className="error-state">
+                        <p role="alert" className="my-[1em] text-[#a92828]">
                             {error}
                         </p>
                     )}
                 </form>
 
-                <div className="auth-card__footer">
-                    <Link href="/login">
+                <div className="mt-5 text-center text-[0.86rem] text-text-secondary">
+                    <Link href="/login" className="font-bold no-underline hover:underline">
                         Quay lại đăng nhập
                     </Link>
                 </div>

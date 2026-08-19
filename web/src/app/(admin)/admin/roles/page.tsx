@@ -12,11 +12,21 @@ import {
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import type { Permission, Role } from "@/types/user";
+
+const ROW =
+    "grid grid-cols-[1fr_1.4fr_1.6fr_90px] items-center gap-3 px-[1.1rem] py-3 text-inherit no-underline";
+const ROW_HEAD =
+    "bg-[rgba(43,36,32,0.04)] text-xs font-semibold tracking-[0.05em] text-text-muted uppercase";
+const ROW_BODY = "border-t border-[rgba(43,36,32,0.08)] text-sm";
+const ICON_BTN =
+    "flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-border bg-transparent no-underline";
+const FORM_FIELD = "mb-1.5 block text-[0.8rem] font-medium";
 
 // Roles admin page (T21, AC1) — list/create/edit/delete a role with a permission checkbox
 // grid, modeled on admin/products/page.tsx's search+table layout. The create/edit form is
-// a modal (reusing the .modal/.modal-overlay classes from AddToCartModal.tsx) rather than a
+// a modal (same overlay/panel utilities as AddToCartModal.tsx) rather than a
 // separate route, since a role is just {name, description, permissionIds} — small enough
 // not to need its own page the way the product form does.
 export default function AdminRolesPage() {
@@ -146,16 +156,18 @@ export default function AdminRolesPage() {
 
     return (
         <>
-            <header className="admin-header">
-                <div className="admin-header__title">Quản lý vai trò</div>
-                <div className="admin-header__avatar">AD</div>
+            <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
+                <div className="font-heading text-[1.35rem] font-semibold">Quản lý vai trò</div>
+                <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
+                    AD
+                </div>
             </header>
 
-            <section className="admin-content">
-                <div className="admin-toolbar">
-                    <div className="search-field">
+            <section className="p-7">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative m-0 max-w-[380px] min-w-[220px] flex-1">
                         <svg
-                            className="search-field__icon"
+                            className="pointer-events-none absolute top-1/2 left-[14px] -translate-y-1/2 text-text-muted"
                             width="15"
                             height="15"
                             viewBox="0 0 24 24"
@@ -169,7 +181,7 @@ export default function AdminRolesPage() {
                         </svg>
                         <input
                             type="search"
-                            className="search-input"
+                            className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
                             aria-label="Tìm vai trò"
                             placeholder="Tìm vai trò…"
                             value={searchInput}
@@ -178,7 +190,7 @@ export default function AdminRolesPage() {
                     </div>
                     <button
                         type="button"
-                        className="btn btn--primary"
+                        className="btn btn-primary"
                         onClick={() => setEditingRole(null)}
                     >
                         + Thêm vai trò
@@ -190,17 +202,17 @@ export default function AdminRolesPage() {
                 {isLoading && <LoadingState label="Đang tải vai trò..." />}
                 {!isLoading && loadError && <ErrorState message={loadError} />}
                 {!isLoading && !loadError && (
-                    <div className="admin-table">
-                        <div className="admin-table__row admin-table__row--roles admin-table__row--head">
+                    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+                        <div className={cn(ROW, ROW_HEAD)}>
                             <span>Tên vai trò</span>
                             <span>Mô tả</span>
                             <span>Quyền</span>
                             <span></span>
                         </div>
                         {filteredRoles.map((role) => (
-                            <div key={role.id} className="admin-table__row admin-table__row--roles admin-table__row--body">
+                            <div key={role.id} className={cn(ROW, ROW_BODY)}>
                                 <div>
-                                    <div className="admin-table__name">{role.name}</div>
+                                    <div className="font-semibold">{role.name}</div>
                                 </div>
                                 <span>{role.description || "—"}</span>
                                 <span>
@@ -208,10 +220,10 @@ export default function AdminRolesPage() {
                                         ? role.permissions.map((p) => p.code).join(", ")
                                         : "Không có quyền nào"}
                                 </span>
-                                <div className="admin-table__actions">
+                                <div className="flex justify-end gap-2">
                                     <button
                                         type="button"
-                                        className="admin-icon-btn"
+                                        className={cn(ICON_BTN, "text-text")}
                                         aria-label={`Sửa ${role.name}`}
                                         onClick={() => setEditingRole(role)}
                                     >
@@ -222,7 +234,7 @@ export default function AdminRolesPage() {
                                     </button>
                                     <button
                                         type="button"
-                                        className="admin-icon-btn admin-icon-btn--danger"
+                                        className={cn(ICON_BTN, "text-[#b4483a]")}
                                         aria-label={`Xoá ${role.name}`}
                                         disabled={deletingId === role.id}
                                         onClick={() => handleDelete(role)}
@@ -236,7 +248,7 @@ export default function AdminRolesPage() {
                             </div>
                         ))}
                         {filteredRoles.length === 0 && (
-                            <div className="admin-table__empty">
+                            <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
                                 Không tìm thấy vai trò nào khớp với &quot;{searchInput}&quot;.
                             </div>
                         )}
@@ -330,21 +342,25 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
     }
 
     return (
-        <div className="modal-overlay" role="presentation" onClick={onClose}>
+        <div
+            className="fixed inset-0 z-[200] grid animate-account-menu-in place-items-center bg-[rgba(43,36,32,0.45)] p-6"
+            role="presentation"
+            onClick={onClose}
+        >
             <div
-                className="modal"
+                className="max-h-[calc(100vh-3rem)] w-[min(100%,480px)] overflow-y-auto rounded-[18px] border border-border bg-surface p-[clamp(1.25rem,3vw,1.75rem)] shadow-[0_20px_50px_rgba(43,36,32,0.16)]"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="role-form-heading"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="modal__header">
-                    <h2 id="role-form-heading">
+                <div className="mb-3 flex items-center justify-between gap-4">
+                    <h2 id="role-form-heading" className="font-heading text-[1.3rem] text-text">
                         {isEditing ? "Sửa vai trò" : "Thêm vai trò"}
                     </h2>
                     <button
                         type="button"
-                        className="modal__close"
+                        className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[1.4rem] leading-none text-text-muted hover:bg-[rgba(43,36,32,0.06)] hover:text-text"
                         onClick={onClose}
                         aria-label="Đóng"
                     >
@@ -352,23 +368,23 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                     </button>
                 </div>
 
-                <div className="admin-form-field">
+                <div className={FORM_FIELD}>
                     <label htmlFor="role-name">Tên vai trò</label>
                     <input
                         id="role-name"
                         type="text"
-                        className="admin-form-input"
+                        className="input mb-4"
                         value={name}
                         onChange={(event) => setName(event.target.value)}
                         placeholder="VD: STAFF"
                     />
                 </div>
 
-                <div className="admin-form-field">
+                <div className={FORM_FIELD}>
                     <label htmlFor="role-description">Mô tả</label>
                     <textarea
                         id="role-description"
-                        className="admin-form-textarea"
+                        className="input mb-4 resize-y"
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
                         placeholder="Mô tả ngắn về vai trò này"
@@ -376,24 +392,30 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                     />
                 </div>
 
-                <section aria-label="Chọn quyền" className="modal__section">
-                    <p className="modal__section-label">Quyền</p>
+                <section aria-label="Chọn quyền" className="mb-5">
+                    <p className="mb-[0.6rem] text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
+                        Quyền
+                    </p>
                     {permissions.length === 0 ? (
-                        <p>Chưa có quyền nào trong hệ thống.</p>
+                        <p className="my-[1em]">Chưa có quyền nào trong hệ thống.</p>
                     ) : (
-                        <ul className="admin-permission-grid">
+                        <ul className="grid gap-2.5">
                             {permissions.map((permission) => (
-                                <li key={permission.id} className="admin-permission-item">
-                                    <label className="admin-permission-checkbox">
+                                <li
+                                    key={permission.id}
+                                    className="rounded-lg border border-border px-3 py-2.5"
+                                >
+                                    <label className="flex cursor-pointer items-start gap-2.5 text-[0.88rem]">
                                         <input
                                             type="checkbox"
+                                            className="mt-[0.2rem]"
                                             checked={selectedPermissionIds.has(permission.id)}
                                             onChange={() => togglePermission(permission.id)}
                                         />
                                         <span>
                                             <strong>{permission.code}</strong>
                                             {permission.description && (
-                                                <span className="admin-permission-item__description">
+                                                <span className="text-text-muted">
                                                     {" "}
                                                     — {permission.description}
                                                 </span>
@@ -407,15 +429,15 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                 </section>
 
                 {submitError && (
-                    <p role="alert" className="error-state">
+                    <p role="alert" className="my-[1em] text-[#a92828]">
                         {submitError}
                     </p>
                 )}
 
-                <div className="modal__actions">
+                <div className="mt-6 flex gap-3">
                     <button
                         type="button"
-                        className="btn btn--outline"
+                        className="btn btn-outline flex-1"
                         onClick={onClose}
                         disabled={isSubmitting}
                     >
@@ -423,7 +445,7 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                     </button>
                     <button
                         type="button"
-                        className="btn btn--primary"
+                        className="btn btn-primary flex-1"
                         onClick={handleSubmit}
                         disabled={isSubmitting}
                     >

@@ -11,6 +11,14 @@ import { getAccessToken } from "@/lib/auth/session";
 import { getColorSwatch } from "@/lib/format/color";
 import { formatPriceVnd } from "@/lib/format/price";
 
+// Shared class strings for the pieces that repeat inside the item list — kept as consts so the
+// image/placeholder pair and the two stepper buttons can't drift apart.
+const CART_ITEM_IMAGE =
+  "h-[84px] w-[84px] rounded-lg bg-[#f0f0f0] object-contain max-[700px]:h-16 max-[700px]:w-16 max-[700px]:[grid-area:image]";
+const CART_ITEM_IMAGE_PLACEHOLDER = `${CART_ITEM_IMAGE} bg-[repeating-linear-gradient(135deg,#ede6d8,#ede6d8_12px,#e4dbc9_12px,#e4dbc9_24px)]`;
+const STEPPER_BUTTON =
+  "inline-flex h-[34px] w-[34px] cursor-pointer items-center justify-center border-0 bg-transparent font-body text-[1rem] font-semibold text-text enabled:hover:bg-[rgba(201,123,74,0.1)] enabled:hover:text-accent-dark disabled:cursor-not-allowed disabled:opacity-40";
+
 // FR1/T16: list cart items, let the user change quantity or remove an item, show the running
 // total, and lead into checkout. Cart CRUD is done here directly (not via AddToCartModal, which
 // only handles the initial add) so it can dispatch "cart-change" the same way after every
@@ -93,24 +101,30 @@ export function CartPage() {
   }
 
   return (
-    <section aria-labelledby="cart-heading" className="cart-page">
-      <h1 id="cart-heading">Giỏ hàng của bạn</h1>
+    <section
+      aria-labelledby="cart-heading"
+      className="mx-auto max-w-[1050px] py-[clamp(1.5rem,4vw,3rem)]"
+    >
+      <h1 id="cart-heading" className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text">
+        Giỏ hàng của bạn
+      </h1>
 
       {items.length === 0 ? (
-        <p className="cart-page__empty">
+        <p className="rounded-2xl border border-border bg-surface p-[clamp(1.5rem,4vw,2.5rem)] text-center text-text-muted">
           Giỏ hàng của bạn đang trống. Hãy khám phá sản phẩm và thêm vào giỏ hàng.
         </p>
       ) : (
         <>
           {mutationError && (
-            <p role="alert" className="error-state">
+            <p role="alert" className="my-[1em] text-[#a92828]">
               {mutationError}
             </p>
           )}
 
-          <label className="cart-page__select-all">
+          <label className="mb-3 inline-flex cursor-pointer items-center gap-2 text-[0.9rem] text-text-secondary">
             <input
               type="checkbox"
+              className="h-[18px] w-[18px] cursor-pointer"
               checked={allSelected}
               onChange={toggleSelectAll}
               aria-label="Chọn tất cả sản phẩm"
@@ -118,12 +132,15 @@ export function CartPage() {
             Chọn tất cả
           </label>
 
-          <ul className="cart-page__items">
+          <ul className="mb-6 flex flex-col gap-4">
             {items.map((item) => (
-              <li key={item.variantId} className="cart-item">
+              <li
+                key={item.variantId}
+                className="grid grid-cols-[auto_84px_1fr_auto_auto_auto] items-center gap-4 rounded-xl border border-border bg-surface p-4 shadow-[0_10px_26px_rgba(43,36,32,0.05)] max-[700px]:grid-cols-[auto_64px_1fr] max-[700px]:gap-y-3 max-[700px]:[grid-template-areas:'checkbox_image_info'_'checkbox_stepper_stepper'_'checkbox_subtotal_remove']"
+              >
                 <input
                   type="checkbox"
-                  className="cart-item__checkbox"
+                  className="h-[18px] w-[18px] cursor-pointer max-[700px]:[grid-area:checkbox]"
                   checked={selectedVariantIds.has(item.variantId)}
                   onChange={() => toggleSelected(item.variantId)}
                   aria-label={`Chọn ${item.productName}`}
@@ -133,18 +150,20 @@ export function CartPage() {
                   <ImageWithFallback
                     src={item.productImageUrl}
                     alt={item.productName}
-                    className="cart-item__image"
-                    placeholderClassName="cart-item__image cart-item__image--placeholder"
+                    className={CART_ITEM_IMAGE}
+                    placeholderClassName={CART_ITEM_IMAGE_PLACEHOLDER}
                   />
                 ) : (
-                  <div className="cart-item__image cart-item__image--placeholder" />
+                  <div className={CART_ITEM_IMAGE_PLACEHOLDER} />
                 )}
 
-                <div className="cart-item__info">
-                  <p className="cart-item__name">{item.productName}</p>
-                  <p className="cart-item__variant">
+                <div className="min-w-0 max-[700px]:[grid-area:info]">
+                  <p className="mb-[0.3rem] font-heading text-[1rem] font-semibold text-text">
+                    {item.productName}
+                  </p>
+                  <p className="mb-[0.3rem] flex items-center gap-[0.4rem] text-[0.82rem] text-text-muted">
                     <span
-                      className="swatch swatch--inline"
+                      className="inline-block h-[14px] w-[14px] shrink-0 rounded-full border-2 border-border"
                       style={{ backgroundColor: item.colorHex ?? getColorSwatch(item.color).hex }}
                       role="img"
                       aria-label={item.color}
@@ -152,21 +171,30 @@ export function CartPage() {
                     />
                     Màu: {item.color} · Kích thước: {item.size}
                   </p>
-                  <p className="cart-item__price">{formatPriceVnd(item.unitPrice)}</p>
+                  <p className="text-[0.9rem] font-semibold text-text-secondary">
+                    {formatPriceVnd(item.unitPrice)}
+                  </p>
                 </div>
 
-                <div className="quantity-stepper">
+                <div className="inline-flex items-center overflow-hidden rounded-[10px] border border-border bg-[#fffdf9] max-[700px]:justify-self-start max-[700px]:[grid-area:stepper]">
                   <button
                     type="button"
+                    className={STEPPER_BUTTON}
                     onClick={() => handleUpdateQuantity(item.variantId, item.quantity - 1)}
                     disabled={mutatingVariantId === item.variantId || item.quantity <= 1}
                     aria-label={`Giảm số lượng ${item.productName}`}
                   >
                     −
                   </button>
-                  <span aria-live="polite">{item.quantity}</span>
+                  <span
+                    aria-live="polite"
+                    className="inline-flex min-w-[2rem] items-center justify-center text-[0.9rem] font-semibold text-text"
+                  >
+                    {item.quantity}
+                  </span>
                   <button
                     type="button"
+                    className={STEPPER_BUTTON}
                     onClick={() => handleUpdateQuantity(item.variantId, item.quantity + 1)}
                     disabled={mutatingVariantId === item.variantId || item.quantity >= 99}
                     aria-label={`Tăng số lượng ${item.productName}`}
@@ -175,11 +203,13 @@ export function CartPage() {
                   </button>
                 </div>
 
-                <p className="cart-item__subtotal">{formatPriceVnd(item.subtotal)}</p>
+                <p className="text-[0.95rem] font-bold whitespace-nowrap text-text max-[700px]:[grid-area:subtotal]">
+                  {formatPriceVnd(item.subtotal)}
+                </p>
 
                 <button
                   type="button"
-                  className="btn btn--outline btn--small"
+                  className="btn btn-outline btn-small max-[700px]:justify-self-end max-[700px]:[grid-area:remove]"
                   onClick={() => handleRemove(item.variantId)}
                   disabled={mutatingVariantId === item.variantId}
                 >
@@ -189,13 +219,14 @@ export function CartPage() {
             ))}
           </ul>
 
-          <div className="cart-page__summary">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-surface px-[clamp(1.2rem,3vw,1.75rem)] py-5 shadow-[0_14px_36px_rgba(43,36,32,0.06)] max-[700px]:flex-col max-[700px]:items-stretch max-[700px]:text-center">
             {selectedCount > 0 ? (
-              <p className="cart-page__total">
-                Tổng cộng ({selectedCount} sản phẩm): <strong>{formatPriceVnd(selectedTotal)}</strong>
+              <p className="text-[1.05rem] text-text-secondary">
+                Tổng cộng ({selectedCount} sản phẩm):{" "}
+                <strong className="text-[1.2rem] text-text">{formatPriceVnd(selectedTotal)}</strong>
               </p>
             ) : (
-              <p className="cart-page__total cart-page__total--empty">
+              <p className="text-[1.05rem] text-text-muted italic">
                 Chọn sản phẩm để xem tổng tiền
               </p>
             )}
@@ -204,12 +235,12 @@ export function CartPage() {
                 href={`/checkout?variantIds=${Array.from(selectedVariantIds)
                   .map(encodeURIComponent)
                   .join(",")}`}
-                className="btn btn--primary"
+                className="btn btn-primary"
               >
                 Tiến hành thanh toán
               </Link>
             ) : (
-              <button type="button" className="btn btn--primary" disabled>
+              <button type="button" className="btn btn-primary" disabled>
                 Tiến hành thanh toán
               </button>
             )}

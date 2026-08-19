@@ -8,8 +8,19 @@ import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { LoadingState } from "@/components/common/LoadingState";
 import { useProducts } from "@/hooks/useProducts";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import { formatFrameShapeVi } from "@/lib/labels";
 import { formatPriceVnd } from "@/lib/format/price";
+
+const ROW =
+  "grid grid-cols-[56px_2.2fr_1fr_1fr_0.8fr_100px] items-center gap-3 px-[1.1rem] py-3 text-inherit no-underline";
+const ROW_HEAD =
+  "bg-[rgba(43,36,32,0.04)] text-xs font-semibold tracking-[0.05em] text-text-muted uppercase";
+const ROW_BODY = "border-t border-[rgba(43,36,32,0.08)] text-sm";
+const THUMB =
+  "h-10 w-10 rounded-md bg-[image:repeating-linear-gradient(135deg,#ede6d8,#ede6d8_6px,#e4dbc9_6px,#e4dbc9_12px)] object-contain";
+const ICON_BTN =
+  "flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-border bg-transparent no-underline";
 
 // Admin product list (T17, AC1/AC4) — matches Admin Products.dc.html: stat cards (no AR stat,
 // intentionally dropped, see plan Summary), search-by-name, and a table with edit/delete actions.
@@ -60,25 +71,27 @@ export default function AdminProductsPage() {
 
   return (
     <>
-      <header className="admin-header">
-        <div className="admin-header__title">Quản lý sản phẩm</div>
-        <div className="admin-header__avatar">AD</div>
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
+        <div className="font-heading text-[1.35rem] font-semibold">Quản lý sản phẩm</div>
+        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
+          AD
+        </div>
       </header>
 
-      <section className="admin-content">
-        <div className="admin-stats">
+      <section className="p-7">
+        <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3.5">
           {stats.map((stat) => (
-            <div key={stat.label} className="admin-stat-card">
-              <div className="admin-stat-card__label">{stat.label}</div>
-              <div className="admin-stat-card__value">{stat.value}</div>
+            <div key={stat.label} className="rounded-lg border border-border bg-surface px-[1.1rem] py-4">
+              <div className="mb-1.5 text-[0.78rem] text-text-muted">{stat.label}</div>
+              <div className="font-heading text-[1.35rem] font-semibold">{stat.value}</div>
             </div>
           ))}
         </div>
 
-        <div className="admin-toolbar">
-          <div className="search-field">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative m-0 max-w-[380px] min-w-[220px] flex-1">
             <svg
-              className="search-field__icon"
+              className="pointer-events-none absolute top-1/2 left-[14px] -translate-y-1/2 text-text-muted"
               width="15"
               height="15"
               viewBox="0 0 24 24"
@@ -92,14 +105,14 @@ export default function AdminProductsPage() {
             </svg>
             <input
               type="search"
-              className="search-input"
+              className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
               aria-label="Tìm sản phẩm"
               placeholder="Tìm sản phẩm…"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
           </div>
-          <Link href="/admin/products/new" className="btn btn--primary">
+          <Link href="/admin/products/new" className="btn btn-primary">
             + Thêm sản phẩm
           </Link>
         </div>
@@ -109,8 +122,8 @@ export default function AdminProductsPage() {
         {isLoading && <LoadingState label="Đang tải sản phẩm..." />}
         {!isLoading && error && <ErrorState message={error} />}
         {!isLoading && !error && (
-          <div className="admin-table">
-            <div className="admin-table__row admin-table__row--head">
+          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+            <div className={cn(ROW, ROW_HEAD)}>
               <span></span>
               <span>Sản phẩm</span>
               <span>Kiểu dáng</span>
@@ -122,30 +135,37 @@ export default function AdminProductsPage() {
               const thumbnail = product.images.find((image) => image.isThumbnail) ?? product.images[0];
               const isOnSale = product.status === "PUBLISHED";
               return (
-                <div key={product.id} className="admin-table__row admin-table__row--body">
+                <div key={product.id} className={cn(ROW, ROW_BODY)}>
                   {thumbnail ? (
                     <ImageWithFallback
                       src={thumbnail.imageUrl}
                       alt={product.name}
-                      className="admin-table__thumb"
-                      placeholderClassName="admin-table__thumb"
+                      className={THUMB}
+                      placeholderClassName={THUMB}
                     />
                   ) : (
-                    <div className="admin-table__thumb" role="img" aria-label={product.name} />
+                    <div className={THUMB} role="img" aria-label={product.name} />
                   )}
                   <div>
-                    <div className="admin-table__name">{product.name}</div>
-                    <div className="admin-table__tag">{product.brand.name}</div>
+                    <div className="font-semibold">{product.name}</div>
+                    <div className="text-xs text-text-muted">{product.brand.name}</div>
                   </div>
-                  <span className="admin-table__shape">{formatFrameShapeVi(product.frameShape)}</span>
-                  <span className="admin-table__price">{formatPriceVnd(product.basePrice)}</span>
-                  <span className={`admin-status-badge${isOnSale ? " admin-status-badge--active" : ""}`}>
+                  <span className="text-text-secondary">{formatFrameShapeVi(product.frameShape)}</span>
+                  <span className="font-medium">{formatPriceVnd(product.basePrice)}</span>
+                  <span
+                    className={cn(
+                      "w-fit rounded-full px-[0.6rem] py-1 text-xs font-semibold",
+                      isOnSale
+                        ? "bg-[rgba(74,90,82,0.14)] text-[#4a5a52]"
+                        : "bg-[rgba(138,122,99,0.14)] text-text-muted",
+                    )}
+                  >
                     {isOnSale ? "Đang bán" : "Hết hàng"}
                   </span>
-                  <div className="admin-table__actions">
+                  <div className="flex justify-end gap-2">
                     <Link
                       href={`/admin/products/${product.id}/edit`}
-                      className="admin-icon-btn"
+                      className={cn(ICON_BTN, "text-text")}
                       aria-label={`Sửa ${product.name}`}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -155,7 +175,7 @@ export default function AdminProductsPage() {
                     </Link>
                     <button
                       type="button"
-                      className="admin-icon-btn admin-icon-btn--danger"
+                      className={cn(ICON_BTN, "text-[#b4483a]")}
                       aria-label={`Xoá ${product.name}`}
                       disabled={deletingId === product.id}
                       onClick={() => handleDelete(product.id, product.name)}
@@ -170,7 +190,7 @@ export default function AdminProductsPage() {
               );
             })}
             {filteredProducts.length === 0 && (
-              <div className="admin-table__empty">
+              <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
                 Không tìm thấy sản phẩm nào khớp với &quot;{searchInput}&quot;.
               </div>
             )}

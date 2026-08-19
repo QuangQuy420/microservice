@@ -12,6 +12,8 @@ interface FormState {
   maxAttempts: string;
 }
 
+const FORM_FIELD = "mb-1.5 block text-[0.8rem] font-medium";
+
 function blankForm(): FormState {
   return { intervalMs: "", stuckThresholdMinutes: "", maxAttempts: "" };
 }
@@ -127,12 +129,12 @@ export function SagaSettingsPage() {
 
   return (
     <>
-      <header className="admin-form-header">
-        <div className="admin-form-header__actions">
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
+        <div className="flex gap-2.5">
           <button
             type="submit"
             form="saga-settings-form"
-            className="btn btn--primary"
+            className="btn btn-primary"
             disabled={isSubmitting}
           >
             {isSubmitting ? "Đang lưu…" : "Lưu cấu hình"}
@@ -140,20 +142,22 @@ export function SagaSettingsPage() {
         </div>
       </header>
 
-      <form id="saga-settings-form" className="admin-form" onSubmit={handleSubmit}>
-        <div className="admin-form__title">Cài đặt thử lại saga</div>
-        <div className="admin-form__subtitle">
+      <form id="saga-settings-form" className="mx-auto max-w-[980px] p-7" onSubmit={handleSubmit}>
+        <div className="mb-1 font-heading text-2xl font-semibold">Cài đặt thử lại saga</div>
+        <div className="mb-6 text-[0.85rem] text-text-muted">
           Điều chỉnh chu kỳ, ngưỡng và số lần thử lại của tiến trình xử lý đơn hàng bị kẹt giữa
           chừng khi thanh toán.
         </div>
 
-        {error && <p className="field-error">{error}</p>}
-        {message && <p role="status">{message}</p>}
+        {error && <p className="field-error my-[1em]">{error}</p>}
+        {message && <p role="status" className="my-[1em]">{message}</p>}
 
-        <div className="admin-form-card">
-          <div className="admin-form-card__title">Tham số thử lại</div>
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <div className="mb-4 text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
+            Tham số thử lại
+          </div>
 
-          <label className="admin-form-field" htmlFor="settings-interval-ms">
+          <label className={FORM_FIELD} htmlFor="settings-interval-ms">
             Chu kỳ thử lại (mili-giây)
           </label>
           <input
@@ -161,12 +165,12 @@ export function SagaSettingsPage() {
             type="number"
             min={10000}
             step={1000}
-            className="admin-form-input"
+            className="input mb-4"
             value={form.intervalMs}
             onChange={(event) => updateField("intervalMs", event.target.value)}
           />
 
-          <label className="admin-form-field" htmlFor="settings-stuck-threshold">
+          <label className={FORM_FIELD} htmlFor="settings-stuck-threshold">
             Ngưỡng đơn hàng bị kẹt (phút)
           </label>
           <input
@@ -174,12 +178,12 @@ export function SagaSettingsPage() {
             type="number"
             min={1}
             step={1}
-            className="admin-form-input"
+            className="input mb-4"
             value={form.stuckThresholdMinutes}
             onChange={(event) => updateField("stuckThresholdMinutes", event.target.value)}
           />
 
-          <label className="admin-form-field" htmlFor="settings-max-attempts">
+          <label className={FORM_FIELD} htmlFor="settings-max-attempts">
             Số lần thử lại tối đa
           </label>
           <input
@@ -188,14 +192,14 @@ export function SagaSettingsPage() {
             min={1}
             max={20}
             step={1}
-            className="admin-form-input"
+            className="input mb-4"
             value={form.maxAttempts}
             onChange={(event) => updateField("maxAttempts", event.target.value)}
           />
         </div>
 
         {updatedAt && (
-          <p className="admin-table__tag">
+          <p className="text-xs text-text-muted">
             Cập nhật lần cuối: {new Date(updatedAt).toLocaleString("vi-VN")}
           </p>
         )}

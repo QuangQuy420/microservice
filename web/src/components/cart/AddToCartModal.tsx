@@ -5,6 +5,7 @@ import { ApiError, addCartItem } from "@/lib/api";
 import { dispatchCartChange } from "@/hooks/useCart";
 import { useProduct } from "@/hooks/useProduct";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import { getColorSwatch } from "@/lib/format/color";
 import type { Product } from "@/types/product";
 
@@ -12,6 +13,17 @@ import type { Product } from "@/types/product";
 // order-service/app/services/cart_service.py:14.
 const MAX_ITEM_QUANTITY = 99;
 const MIN_ITEM_QUANTITY = 1;
+
+const MODAL_SECTION_LABEL =
+  "mb-[0.6rem] text-[0.78rem] font-semibold tracking-[0.06em] uppercase text-text-muted";
+const STEPPER_BUTTON =
+  "inline-flex h-[34px] w-[34px] cursor-pointer items-center justify-center border-0 bg-transparent font-body text-[1rem] font-semibold text-text enabled:hover:bg-[rgba(201,123,74,0.1)] enabled:hover:text-accent-dark disabled:cursor-not-allowed disabled:opacity-40";
+// The colour swatch and the size button both carry their selected state as an explicit branch
+// (border/background are set by exactly one of the two arms) rather than by stacking a modifier
+// class on top of the base one.
+const SWATCH =
+  "inline-block h-7 w-7 cursor-pointer rounded-full border-2 p-0 transition-[border-color,transform] duration-[180ms] ease-in-out hover:-translate-y-px";
+const SWATCH_SELECTED = "border-text shadow-[0_0_0_2px_var(--color-surface),0_0_0_4px_var(--color-text)]";
 
 interface AddToCartModalProps {
   product: Product;
@@ -35,7 +47,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
   // A product with only one color (or, once a color is picked, only one size) has nothing to
   // actually choose — auto-pick it so the user isn't blocked on clicking a swatch/button that
   // looks like a static indicator rather than a control. It's still rendered (and shown as
-  // selected, via `.swatch--selected`/`.btn--selected`) so the choice stays visible, not hidden.
+  // selected, via the selected swatch/button styling) so the choice stays visible, not hidden.
   const [selectedColor, setSelectedColor] = useState<string | null>(() =>
     colors.length === 1 ? colors[0] : null,
   );
@@ -143,19 +155,25 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
   }
 
   return (
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
+    <div
+      className="animate-account-menu-in fixed inset-0 z-[200] grid place-items-center bg-[rgba(43,36,32,0.45)] p-6"
+      role="presentation"
+      onClick={onClose}
+    >
       <div
-        className="modal"
+        className="max-h-[calc(100vh-3rem)] w-[min(100%,480px)] overflow-y-auto rounded-[18px] border border-border bg-surface p-[clamp(1.25rem,3vw,1.75rem)] shadow-[0_20px_50px_rgba(43,36,32,0.16)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-to-cart-heading"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="modal__header">
-          <h2 id="add-to-cart-heading">Thêm vào giỏ hàng</h2>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 id="add-to-cart-heading" className="font-heading text-[1.3rem] text-text">
+            Thêm vào giỏ hàng
+          </h2>
           <button
             type="button"
-            className="modal__close"
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[1.4rem] leading-none text-text-muted hover:bg-[rgba(43,36,32,0.06)] hover:text-text"
             onClick={onClose}
             aria-label="Đóng"
           >
@@ -163,14 +181,14 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
           </button>
         </div>
 
-        <p className="modal__product-name">{product.name}</p>
+        <p className="mb-5 text-[0.95rem] font-semibold text-text-secondary">{product.name}</p>
 
-        <section aria-label="Chọn màu sắc" className="modal__section">
-          <p className="modal__section-label">Màu gọng kính</p>
+        <section aria-label="Chọn màu sắc" className="mb-5">
+          <p className={MODAL_SECTION_LABEL}>Màu gọng kính</p>
           {colors.length === 0 ? (
-            <p>Chưa có phiên bản màu nào.</p>
+            <p className="my-[1em]">Chưa có phiên bản màu nào.</p>
           ) : (
-            <ul className="product-detail__swatches">
+            <ul className="mb-6 flex flex-wrap gap-3">
               {colors.map((color) => {
                 // AC6/AC13: prefer a real variant's colorHex; fall back to the legacy name->hex
                 // lookup when no variant of this color has one set yet.
@@ -179,17 +197,17 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
                 const hex = variantOfColor?.colorHex ?? legacySwatch.hex;
                 const isSelected = color === selectedColor;
                 return (
-                  <li key={color} className="swatch-item">
+                  <li key={color} className="flex items-center gap-[0.4rem]">
                     <button
                       type="button"
-                      className={`swatch swatch--selectable${isSelected ? " swatch--selected" : ""}`}
+                      className={cn(SWATCH, isSelected ? SWATCH_SELECTED : "border-border")}
                       style={{ backgroundColor: hex }}
                       aria-pressed={isSelected}
                       aria-label={color}
                       title={color}
                       onClick={() => handleSelectColor(color)}
                     />
-                    <span className="swatch-label">{color}</span>
+                    <span className="text-[0.8rem] text-text-secondary">{color}</span>
                   </li>
                 );
               })}
@@ -198,14 +216,17 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
         </section>
 
         {selectedColor && (
-          <section aria-label="Chọn kích thước" className="modal__section">
-            <p className="modal__section-label">Kích thước</p>
-            <ul className="modal__size-list">
+          <section aria-label="Chọn kích thước" className="mb-5">
+            <p className={MODAL_SECTION_LABEL}>Kích thước</p>
+            <ul className="flex flex-wrap gap-2">
               {sizesForColor.map((size) => (
                 <li key={size}>
                   <button
                     type="button"
-                    className={`btn btn--outline btn--small${size === selectedSize ? " btn--selected" : ""}`}
+                    className={cn(
+                      "btn btn-small",
+                      size === selectedSize ? "border-text bg-text text-surface" : "btn-outline",
+                    )}
                     aria-pressed={size === selectedSize}
                     onClick={() => handleSelectSize(size)}
                   >
@@ -217,20 +238,27 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
           </section>
         )}
 
-        <section aria-label="Số lượng" className="modal__section">
-          <p className="modal__section-label">Số lượng</p>
-          <div className="quantity-stepper">
+        <section aria-label="Số lượng" className="mb-5">
+          <p className={MODAL_SECTION_LABEL}>Số lượng</p>
+          <div className="inline-flex items-center overflow-hidden rounded-[10px] border border-border bg-[#fffdf9]">
             <button
               type="button"
+              className={STEPPER_BUTTON}
               onClick={() => handleStepQuantity(-1)}
               disabled={clampedQuantity <= MIN_ITEM_QUANTITY}
               aria-label="Giảm số lượng"
             >
               −
             </button>
-            <span aria-live="polite">{clampedQuantity}</span>
+            <span
+              aria-live="polite"
+              className="inline-flex min-w-[2rem] items-center justify-center text-[0.9rem] font-semibold text-text"
+            >
+              {clampedQuantity}
+            </span>
             <button
               type="button"
+              className={STEPPER_BUTTON}
               onClick={() => handleStepQuantity(1)}
               disabled={clampedQuantity >= maxQuantity}
               aria-label="Tăng số lượng"
@@ -240,17 +268,19 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
           </div>
 
           {selectedVariant && isCheckingStock && (
-            <p className="modal__stock-note">Đang kiểm tra tồn kho...</p>
+            <p className="mt-[0.6rem] text-[0.82rem] text-text-muted">Đang kiểm tra tồn kho...</p>
           )}
           {selectedVariant && !isCheckingStock && stockCheckError && (
-            <p role="alert" className="error-state">
+            <p role="alert" className="my-[1em] text-[#a92828]">
               {stockCheckError}
             </p>
           )}
           {selectedVariant && !isCheckingStock && !stockCheckError && stock !== null && (
             <p
               role={isOutOfStock ? "alert" : undefined}
-              className={isOutOfStock ? "error-state" : "modal__stock-note"}
+              className={cn(
+                isOutOfStock ? "text-[#a92828]" : "mt-[0.6rem] text-[0.82rem] text-text-muted",
+              )}
             >
               {isOutOfStock ? "Chỉ còn 0 sản phẩm trong kho" : `Còn ${stock} sản phẩm trong kho`}
             </p>
@@ -258,20 +288,20 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
         </section>
 
         {validationError && (
-          <p role="alert" className="error-state">
+          <p role="alert" className="my-[1em] text-[#a92828]">
             {validationError}
           </p>
         )}
         {submitError && (
-          <p role="alert" className="error-state">
+          <p role="alert" className="my-[1em] text-[#a92828]">
             {submitError}
           </p>
         )}
 
-        <div className="modal__actions">
+        <div className="mt-6 flex gap-3">
           <button
             type="button"
-            className="btn btn--outline"
+            className="btn btn-outline flex-1"
             onClick={onClose}
             disabled={isSubmitting}
           >
@@ -279,7 +309,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
           </button>
           <button
             type="button"
-            className="btn btn--primary"
+            className="btn btn-primary flex-1"
             onClick={handleConfirm}
             disabled={isSubmitting || Boolean(selectedVariant && (isCheckingStock || isOutOfStock))}
           >

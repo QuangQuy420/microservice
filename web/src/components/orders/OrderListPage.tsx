@@ -11,6 +11,11 @@ import type { OrderStatus } from "@/types/order";
 
 const PAGE_SIZE = 10;
 
+// The order history reuses the admin table's row rhythm; the column track is the five-column
+// "orders" variant. Head and body rows share the geometry and differ only in type/borders.
+const TABLE_ROW =
+  "grid grid-cols-[1.2fr_1.8fr_1fr_1fr_1.3fr] items-center gap-3 px-[1.1rem] py-3";
+
 // FR3/T18: paginated order history for the logged-in user, with an optional status filter.
 export function OrderListPage() {
   const [status, setStatus] = useState<OrderStatus | undefined>(undefined);
@@ -24,13 +29,25 @@ export function OrderListPage() {
   }
 
   return (
-    <section aria-labelledby="orders-heading" className="orders-page">
-      <h1 id="orders-heading">Đơn hàng của tôi</h1>
+    <section
+      aria-labelledby="orders-heading"
+      className="mx-auto max-w-[1050px] py-[clamp(1.5rem,4vw,3rem)]"
+    >
+      <h1
+        id="orders-heading"
+        className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text"
+      >
+        Đơn hàng của tôi
+      </h1>
 
-      <label htmlFor="orders-status-filter" className="orders-page__filter">
+      <label
+        htmlFor="orders-status-filter"
+        className="mb-6 flex max-w-[280px] flex-col gap-[0.4rem] text-[0.82rem] font-[650] text-text-secondary"
+      >
         Lọc theo trạng thái
         <select
           id="orders-status-filter"
+          className="min-h-[44px] rounded-[10px] border border-border bg-[#fffdf9] px-3 py-[0.6rem] font-body text-[0.88rem] text-text outline-none focus:border-accent focus:shadow-[0_0_0_3px_rgba(201,123,74,0.13)]"
           value={status ?? ""}
           onChange={(event) => handleStatusChange(event.target.value)}
         >
@@ -47,13 +64,17 @@ export function OrderListPage() {
       {!isLoading && error && <ErrorState message={error} />}
 
       {!isLoading && !error && orders.length === 0 && (
-        <p className="orders-page__empty">Bạn chưa có đơn hàng nào.</p>
+        <p className="rounded-2xl border border-border bg-surface p-[clamp(1.5rem,4vw,2.5rem)] text-center text-text-muted">
+          Bạn chưa có đơn hàng nào.
+        </p>
       )}
 
       {!isLoading && !error && orders.length > 0 && (
         <>
-          <div className="admin-table">
-            <div className="admin-table__row admin-table__row--orders admin-table__row--head">
+          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+            <div
+              className={`${TABLE_ROW} bg-[rgba(43,36,32,0.04)] text-[0.75rem] font-semibold tracking-[0.05em] uppercase text-text-muted`}
+            >
               <span>Mã đơn hàng</span>
               <span>Người nhận</span>
               <span>Tổng tiền</span>
@@ -64,25 +85,27 @@ export function OrderListPage() {
               <Link
                 key={order.id}
                 href={`/orders/${order.id}`}
-                className="admin-table__row admin-table__row--orders admin-table__row--body"
+                className={`${TABLE_ROW} border-t border-t-[rgba(43,36,32,0.08)] text-[0.875rem] text-inherit no-underline`}
               >
-                <span className="admin-table__name">{order.orderCode}</span>
+                <span className="font-semibold">{order.orderCode}</span>
                 <span>
                   {order.receiverName}
-                  <span className="admin-table__tag"> · {order.receiverPhone}</span>
+                  <span className="text-[0.75rem] text-text-muted"> · {order.receiverPhone}</span>
                 </span>
-                <span className="admin-table__price">{formatPriceVnd(order.totalAmount)}</span>
-                <span className="admin-status-badge">{formatOrderStatusVi(order.status)}</span>
+                <span className="font-medium">{formatPriceVnd(order.totalAmount)}</span>
+                <span className="w-fit rounded-full bg-[rgba(138,122,99,0.14)] px-[0.6rem] py-1 text-[0.75rem] font-semibold text-text-muted">
+                  {formatOrderStatusVi(order.status)}
+                </span>
                 <span>{new Date(order.createdAt).toLocaleString("vi-VN")}</span>
               </Link>
             ))}
           </div>
 
           {totalPages > 1 && (
-            <div className="orders-page__pagination">
+            <div className="flex items-center justify-center gap-4 text-[0.85rem] text-text-secondary">
               <button
                 type="button"
-                className="btn btn--outline btn--small"
+                className="btn btn-outline btn-small"
                 onClick={() => setPage((current) => Math.max(0, current - 1))}
                 disabled={page <= 0}
               >
@@ -93,7 +116,7 @@ export function OrderListPage() {
               </span>
               <button
                 type="button"
-                className="btn btn--outline btn--small"
+                className="btn btn-outline btn-small"
                 onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
                 disabled={page >= totalPages - 1}
               >
