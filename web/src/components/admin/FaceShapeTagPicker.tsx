@@ -1,5 +1,9 @@
+import { cn } from "@/lib/cn";
 import { FACE_SHAPE_TAGS, formatFaceShapeVi } from "@/lib/labels";
 import type { FaceShapeTag } from "@/types/product";
+
+const TAG =
+  "cursor-pointer rounded-full border px-4 py-2 font-body text-[0.84rem] font-medium";
 
 interface FaceShapeTagPickerProps {
   selected: FaceShapeTag[];
@@ -15,14 +19,19 @@ export function FaceShapeTagPicker({ selected, onChange }: FaceShapeTagPickerPro
   }
 
   return (
-    <div className="admin-face-shape-tags" role="group" aria-label="Phù hợp với dáng mặt">
+    <div className="flex flex-wrap gap-2.5" role="group" aria-label="Phù hợp với dáng mặt">
       {FACE_SHAPE_TAGS.map((tag) => {
         const isSelected = selected.includes(tag);
         return (
           <button
             key={tag}
             type="button"
-            className={`admin-face-shape-tag${isSelected ? " admin-face-shape-tag--active" : ""}`}
+            className={cn(
+              TAG,
+              isSelected
+                ? "border-text bg-text text-bg"
+                : "border-border bg-transparent text-text",
+            )}
             aria-pressed={isSelected}
             onClick={() => toggle(tag)}
           >

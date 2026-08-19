@@ -7,6 +7,23 @@ import { useAuthForm } from "@/hooks/useAuthForm";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// The auth screens share one field/submit look; `.input` (globals.css) carries the common
+// border/focus ring, the extras here are the auth-only deltas (taller box, rounder corners,
+// warmer fill). `motion-reduce:` replaces the old global prefers-reduced-motion override.
+const LABEL_CLASS = "flex flex-col gap-[0.4rem] text-[0.82rem] font-[650] text-text-secondary";
+
+const INPUT_CLASS =
+    "input min-h-[46px] rounded-[10px] bg-[#fffdf9] px-[0.85rem] py-[0.72rem] text-[0.92rem] " +
+    "motion-reduce:transition-none";
+
+const SUBMIT_CLASS =
+    "mt-1 min-h-[46px] cursor-pointer rounded-[10px] border border-text bg-text px-4 py-3 " +
+    "font-body text-[0.9rem] font-bold text-surface " +
+    "transition-[background-color,translate,box-shadow] duration-200 ease-in-out " +
+    "enabled:hover:-translate-y-px enabled:hover:border-accent-dark enabled:hover:bg-accent-dark " +
+    "enabled:hover:shadow-[0_10px_22px_rgba(43,36,32,0.14)] " +
+    "disabled:cursor-not-allowed disabled:opacity-[0.58] motion-reduce:transition-none";
+
 interface FieldErrors {
     username?: string;
     fullName?: string;
@@ -110,14 +127,15 @@ export function RegisterForm() {
 
     return (
         <form
-            className="auth-form"
+            className="flex w-full flex-col gap-4"
             onSubmit={handleSubmit}
             noValidate
         >
-            <label htmlFor="register-username">
+            <label htmlFor="register-username" className={LABEL_CLASS}>
                 Tên đăng nhập
                 <input
                     id="register-username"
+                    className={INPUT_CLASS}
                     type="text"
                     value={username}
                     onChange={(event) =>
@@ -133,10 +151,11 @@ export function RegisterForm() {
                 )}
             </label>
 
-            <label htmlFor="register-full-name">
+            <label htmlFor="register-full-name" className={LABEL_CLASS}>
                 Họ và tên
                 <input
                     id="register-full-name"
+                    className={INPUT_CLASS}
                     type="text"
                     value={fullName}
                     onChange={(event) =>
@@ -152,10 +171,11 @@ export function RegisterForm() {
                 )}
             </label>
 
-            <label htmlFor="register-email">
+            <label htmlFor="register-email" className={LABEL_CLASS}>
                 Email
                 <input
                     id="register-email"
+                    className={INPUT_CLASS}
                     type="email"
                     value={email}
                     onChange={(event) =>
@@ -171,10 +191,11 @@ export function RegisterForm() {
                 )}
             </label>
 
-            <label htmlFor="register-phone">
+            <label htmlFor="register-phone" className={LABEL_CLASS}>
                 Số điện thoại
                 <input
                     id="register-phone"
+                    className={INPUT_CLASS}
                     type="tel"
                     value={phone}
                     onChange={(event) =>
@@ -184,10 +205,11 @@ export function RegisterForm() {
                 />
             </label>
 
-            <label htmlFor="register-password">
+            <label htmlFor="register-password" className={LABEL_CLASS}>
                 Mật khẩu
                 <input
                     id="register-password"
+                    className={INPUT_CLASS}
                     type="password"
                     value={password}
                     onChange={(event) =>
@@ -203,10 +225,11 @@ export function RegisterForm() {
                 )}
             </label>
 
-            <label htmlFor="register-confirm-password">
+            <label htmlFor="register-confirm-password" className={LABEL_CLASS}>
                 Xác nhận mật khẩu
                 <input
                     id="register-confirm-password"
+                    className={INPUT_CLASS}
                     type="password"
                     value={confirmPassword}
                     onChange={(event) =>
@@ -222,20 +245,20 @@ export function RegisterForm() {
                 )}
             </label>
 
-            <button type="submit" disabled={isSubmitting}>
+            <button type="submit" className={SUBMIT_CLASS} disabled={isSubmitting}>
                 {isSubmitting
                     ? "Đang tạo tài khoản..."
                     : "Đăng ký"}
             </button>
 
             {error && (
-                <p role="alert" className="error-state">
+                <p role="alert" className="my-[1em] text-[#a92828]">
                     {error}
                 </p>
             )}
 
             {success && (
-                <p role="status">
+                <p role="status" className="text-[0.84rem] text-[#3d6654]">
                     Đăng ký thành công. Đang chuyển sang đăng nhập...
                 </p>
             )}

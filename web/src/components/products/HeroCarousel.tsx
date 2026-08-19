@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/cn";
 
 const SLIDE_INTERVAL_MS = 4000;
 
@@ -22,14 +23,17 @@ export function HeroCarousel() {
   }, []);
 
   return (
-    <div className="hero-carousel" aria-hidden="true">
+    <div className="relative h-full w-full" aria-hidden="true">
       {SLIDES.map((src, index) => (
         // eslint-disable-next-line @next/next/no-img-element -- matches ImageWithFallback convention, see ProductCard
         <img
           key={src}
           src={src}
           alt=""
-          className={`hero-carousel__slide${index === activeIndex ? " hero-carousel__slide--active" : ""}`}
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-[800ms] ease-[ease]",
+            index === activeIndex ? "opacity-100" : "opacity-0",
+          )}
         />
       ))}
     </div>

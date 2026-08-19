@@ -28,6 +28,14 @@ const STATUS_HINTS: Partial<Record<string, string>> = {
 // How many other products to offer in the switcher/picker strip.
 const SWITCHER_LIMIT = 8;
 
+// Shared by the real thumbnail, its broken-image fallback and the "no image at all" box, so all
+// three occupy the same 80px slot. `group-*` reacts to the enclosing switcher button's
+// hover/focus-visible (the old CSS did it with a descendant selector).
+const SWITCHER_IMAGE_CLASS =
+  "block size-20 overflow-hidden rounded-lg border border-[rgba(43,36,32,0.12)] object-contain " +
+  "bg-[image:repeating-linear-gradient(135deg,#ede6d8,#ede6d8_12px,#e4dbc9_12px,#e4dbc9_24px)] " +
+  "group-hover:border-accent group-focus-visible:border-accent";
+
 // Thin page component: only wires the product fetch + camera/canvas elements together. All
 // MediaPipe/canvas frame-processing logic lives in useFaceTracking (coder.md §4).
 export function TryOnPage({ id }: TryOnPageProps) {
@@ -92,9 +100,12 @@ export function TryOnPage({ id }: TryOnPageProps) {
   const switchableProducts = otherProducts.filter((item) => item.id !== activeId);
 
   return (
-    <section aria-labelledby="try-on-heading" className="face-analysis">
+    <section aria-labelledby="try-on-heading" className="mx-auto max-w-[1050px]">
       {product && (
-        <Link href={`/products/${product.id}`} className="product-detail__back-link">
+        <Link
+          href={`/products/${product.id}`}
+          className="mb-6 inline-flex items-center gap-2 text-[0.9rem] font-medium text-text no-underline hover:text-accent-dark"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
@@ -102,31 +113,46 @@ export function TryOnPage({ id }: TryOnPageProps) {
         </Link>
       )}
 
-      <p className="face-analysis__eyebrow">Thử kính AR</p>
-      <h1 id="try-on-heading" className="face-analysis__title">
+      <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.1em] text-text-muted uppercase">
+        Thử kính AR
+      </p>
+      <h1
+        id="try-on-heading"
+        className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
+      >
         {product ? `Thử kính ${product.name}` : "Thử kính AR"}
       </h1>
-      <p className="face-analysis__subtitle">
+      <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
         {product
           ? "Cho phép camera để xem gọng kính này theo dõi khuôn mặt của bạn trực tiếp trên trình duyệt — không có hình ảnh hay video nào được gửi lên máy chủ."
           : "Cho phép camera, sau đó chọn 1 gọng kính bên dưới để xem gọng kính đó theo dõi khuôn mặt của bạn trực tiếp trên trình duyệt — không có hình ảnh hay video nào được gửi lên máy chủ."}
       </p>
 
-      <div className="face-analysis__card">
-        <div className="try-on__video-frame">
-          <video ref={videoRef} className="try-on__video" playsInline muted aria-hidden="true" />
-          <canvas ref={canvasRef} className="try-on__canvas" aria-hidden="true" />
+      <div className="mb-5 rounded-[10px] border border-border bg-surface px-6 py-5">
+        <div className="relative mx-auto aspect-[4/3] w-full max-w-[640px] overflow-hidden rounded-lg bg-[#1c1712]">
+          <video
+            ref={videoRef}
+            className="absolute inset-0 h-full w-full object-cover [transform:scaleX(-1)]"
+            playsInline
+            muted
+            aria-hidden="true"
+          />
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 h-full w-full object-cover [transform:scaleX(-1)]"
+            aria-hidden="true"
+          />
         </div>
         {hint && (
-          <p role="status" className="try-on__hint">
+          <p role="status" className="mt-3.5 text-center text-[0.85rem] text-text-secondary">
             {hint}
           </p>
         )}
         {product && (
-          <div className="product-detail__actions try-on__actions">
+          <div className="mt-5 flex flex-wrap gap-3">
             <button
               type="button"
-              className="btn btn--outline"
+              className="btn btn-outline min-w-[160px] flex-1"
               onClick={() => setIsAddToCartOpen(true)}
               aria-label="Thêm vào giỏ hàng"
             >
@@ -141,16 +167,16 @@ export function TryOnPage({ id }: TryOnPageProps) {
       )}
 
       {switchableProducts.length > 0 && (
-        <div className="face-analysis__card">
-          <p className="face-analysis__section-label">
+        <div className="mb-5 rounded-[10px] border border-border bg-surface px-6 py-5">
+          <p className="mb-3.5 text-[0.8rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
             {product ? "Thử sản phẩm khác" : "Chọn 1 gọng kính để thử"}
           </p>
           {switchError && (
-            <p role="status" className="try-on__hint">
+            <p role="status" className="mt-3.5 text-center text-[0.85rem] text-text-secondary">
               {switchError}
             </p>
           )}
-          <div className="try-on__switcher">
+          <div className="flex gap-3 overflow-x-auto pb-1">
             {switchableProducts.map((item) => {
               const itemThumbnail =
                 item.images.find((image) => image.isThumbnail) ?? item.images[0];
@@ -158,7 +184,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
                 <button
                   key={item.id}
                   type="button"
-                  className="try-on__switcher-item"
+                  className="group flex w-[88px] shrink-0 cursor-pointer flex-col items-center gap-1.5"
                   onClick={() => setActiveId(item.id)}
                   aria-label={`Thử kính ${item.name}`}
                 >
@@ -166,13 +192,15 @@ export function TryOnPage({ id }: TryOnPageProps) {
                     <ImageWithFallback
                       src={itemThumbnail.imageUrl}
                       alt={item.name}
-                      className="try-on__switcher-image"
-                      placeholderClassName="try-on__switcher-image try-on__switcher-placeholder"
+                      className={SWITCHER_IMAGE_CLASS}
+                      placeholderClassName={SWITCHER_IMAGE_CLASS}
                     />
                   ) : (
-                    <div className="try-on__switcher-image try-on__switcher-placeholder" />
+                    <div className={SWITCHER_IMAGE_CLASS} />
                   )}
-                  <span className="try-on__switcher-name">{item.name}</span>
+                  <span className="line-clamp-2 overflow-hidden text-center text-[0.75rem] leading-[1.2] text-ellipsis">
+                    {item.name}
+                  </span>
                 </button>
               );
             })}

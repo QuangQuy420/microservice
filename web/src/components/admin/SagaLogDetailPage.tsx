@@ -6,8 +6,16 @@ import { ApiError, getOrderSagaLogs } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import { formatSagaLogRowStatusVi, formatSagaLogServiceVi, formatSagaLogStageVi } from "@/lib/labels";
 import type { OrderSagaLog } from "@/types/saga-log";
+
+const ROW =
+  "grid grid-cols-[1fr_1.15fr_0.85fr_0.85fr_0.8fr_1.5fr_0.7fr] items-start gap-3 px-[1.1rem] py-3 text-inherit no-underline";
+const ROW_HEAD =
+  "bg-[rgba(43,36,32,0.04)] text-xs font-semibold tracking-[0.05em] text-text-muted uppercase";
+const ROW_BODY = "border-t border-[rgba(43,36,32,0.08)] text-sm";
+const BADGE = "w-fit rounded-full px-[0.6rem] py-1 text-xs font-semibold";
 
 interface SagaLogDetailPageProps {
   orderId: string;
@@ -73,13 +81,18 @@ export function SagaLogDetailPage({ orderId, date }: SagaLogDetailPageProps) {
 
   return (
     <>
-      <header className="admin-header">
-        <div className="admin-header__title">Chi tiết nhật ký xử lý đơn hàng</div>
-        <div className="admin-header__avatar">AD</div>
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
+        <div className="font-heading text-[1.35rem] font-semibold">Chi tiết nhật ký xử lý đơn hàng</div>
+        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
+          AD
+        </div>
       </header>
 
-      <section className="admin-content">
-        <Link href={`/admin/saga-logs/${date}`} className="product-detail__back-link">
+      <section className="p-7">
+        <Link
+          href={`/admin/saga-logs/${date}`}
+          className="mb-6 inline-flex items-center gap-2 text-[0.9rem] font-medium text-text no-underline"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
@@ -90,10 +103,12 @@ export function SagaLogDetailPage({ orderId, date }: SagaLogDetailPageProps) {
         {!isLoading && error && <ErrorState message={error} />}
 
         {!isLoading && !error && (
-          <article className="order-detail__section">
-            <h2>Dòng thời gian đơn hàng {orderId}</h2>
-            <div className="admin-table">
-              <div className="admin-table__row admin-table__row--saga-detail admin-table__row--head">
+          <article className="mb-5 rounded-2xl border border-border bg-surface p-[clamp(1.2rem,3vw,1.75rem)] shadow-[0_14px_36px_rgba(43,36,32,0.06)]">
+            <h2 className="mb-4 font-heading text-[1.2rem] text-text">
+              Dòng thời gian đơn hàng {orderId}
+            </h2>
+            <div className="overflow-hidden rounded-lg border border-border bg-surface">
+              <div className={cn(ROW, ROW_HEAD)}>
                 <span>Thời gian</span>
                 <span>Mốc sự kiện</span>
                 <span>Nơi bắn sự kiện</span>
@@ -102,33 +117,39 @@ export function SagaLogDetailPage({ orderId, date }: SagaLogDetailPageProps) {
                 <span>Ghi chú</span>
                 <span>Số lần retry</span>
               </div>
-              {sortedLogs.map((entry, index) => (
-                <div
-                  key={`${entry.stage}-${entry.occurredAt}-${index}`}
-                  className={`admin-table__row admin-table__row--saga-detail admin-table__row--body${
-                    entry.level === "WARN" ? " admin-table__row--warning" : ""
-                  }`}
-                >
-                  <span>{new Date(entry.occurredAt).toLocaleString("vi-VN")}</span>
-                  <span className="admin-table__name">{formatSagaLogStageVi(entry.stage)}</span>
-                  <span>{formatSagaLogServiceVi(entry.sourceService)}</span>
-                  <span>{formatSagaLogServiceVi(entry.targetService)}</span>
-                  <span>
-                    <span
-                      className={`admin-status-badge${
-                        entry.level === "WARN" ? " admin-status-badge--warning" : " admin-status-badge--active"
-                      }`}
-                    >
-                      {formatSagaLogRowStatusVi(entry.level)}
+              {sortedLogs.map((entry, index) => {
+                const isWarning = entry.level === "WARN";
+                return (
+                  <div
+                    key={`${entry.stage}-${entry.occurredAt}-${index}`}
+                    className={cn(ROW, ROW_BODY, isWarning && "bg-[rgba(169,40,40,0.05)]")}
+                  >
+                    <span>{new Date(entry.occurredAt).toLocaleString("vi-VN")}</span>
+                    <span className="font-semibold">{formatSagaLogStageVi(entry.stage)}</span>
+                    <span>{formatSagaLogServiceVi(entry.sourceService)}</span>
+                    <span>{formatSagaLogServiceVi(entry.targetService)}</span>
+                    <span>
+                      <span
+                        className={cn(
+                          BADGE,
+                          isWarning
+                            ? "bg-[rgba(169,40,40,0.14)] text-[#a92828]"
+                            : "bg-[rgba(74,90,82,0.14)] text-[#4a5a52]",
+                        )}
+                      >
+                        {formatSagaLogRowStatusVi(entry.level)}
+                      </span>
                     </span>
-                  </span>
-                  <span>{entry.errorDetail ?? "—"}</span>
-                  <span>{entry.retryCount ?? "—"}</span>
-                </div>
-              ))}
+                    <span>{entry.errorDetail ?? "—"}</span>
+                    <span>{entry.retryCount ?? "—"}</span>
+                  </div>
+                );
+              })}
             </div>
             {sortedLogs.length === 0 && (
-              <div className="admin-table__empty">Chưa có nhật ký nào cho đơn hàng này.</div>
+              <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
+                Chưa có nhật ký nào cho đơn hàng này.
+              </div>
             )}
           </article>
         )}

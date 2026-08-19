@@ -10,6 +10,7 @@ import {
   updateProduct,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import {
   FRAME_SHAPES,
   GENDER_TARGETS,
@@ -33,6 +34,11 @@ import type { ProductVariant } from "@/types/product";
 interface ProductEditFormProps {
   product: Product | null;
 }
+
+const CARD = "rounded-lg border border-border bg-surface p-5";
+const CARD_TITLE =
+  "mb-4 text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase";
+const FORM_FIELD = "mb-1.5 block text-[0.8rem] font-medium";
 
 interface FormState {
   name: string;
@@ -190,44 +196,49 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
     }
   }
 
+  const isPublished = form.status === "PUBLISHED";
+
   return (
     <>
-      <header className="admin-form-header">
-        <a href="/admin/products" className="admin-form-header__back">
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
+        <a
+          href="/admin/products"
+          className="flex items-center gap-2 text-sm font-medium text-text no-underline"
+        >
           ← Quay lại danh sách
         </a>
-        <div className="admin-form-header__actions">
+        <div className="flex gap-2.5">
           <button
             type="button"
-            className="btn btn--outline"
+            className="btn btn-outline"
             onClick={() => router.push("/admin/products")}
           >
             Huỷ
           </button>
-          <button type="submit" form="product-edit-form" className="btn btn--primary" disabled={isSubmitting}>
+          <button type="submit" form="product-edit-form" className="btn btn-primary" disabled={isSubmitting}>
             {isSubmitting ? "Đang lưu…" : "Lưu sản phẩm"}
           </button>
         </div>
       </header>
 
-      <form id="product-edit-form" className="admin-form" onSubmit={handleSubmit}>
-        <div className="admin-form__title">
+      <form id="product-edit-form" className="mx-auto max-w-[980px] p-7" onSubmit={handleSubmit}>
+        <div className="mb-1 font-heading text-2xl font-semibold">
           {isNew ? "Thêm sản phẩm mới" : "Chỉnh sửa sản phẩm"}
         </div>
-        <div className="admin-form__subtitle">
+        <div className="mb-6 text-[0.85rem] text-text-muted">
           {isNew
             ? "Điền thông tin gọng kính để thêm vào danh mục."
             : `Đang chỉnh sửa: ${product.name}`}
         </div>
 
-        {error && <p className="field-error">{error}</p>}
+        {error && <p className="field-error my-[1em]">{error}</p>}
 
-        <div className="admin-form__layout">
-          <div className="admin-form__images">
-            <div className="admin-image-slots">
-              <div className="admin-form-card__title">Hình ảnh sản phẩm</div>
+        <div className="flex flex-col gap-6">
+          <div className="w-full">
+            <div className="rounded-lg border border-border bg-surface p-[1.125rem]">
+              <div className={CARD_TITLE}>Hình ảnh sản phẩm</div>
               {!savedProductId && (
-                <p className="admin-table__tag">Lưu sản phẩm trước để tải ảnh lên.</p>
+                <p className="text-xs text-text-muted">Lưu sản phẩm trước để tải ảnh lên.</p>
               )}
               <ProductImageManager
                 productId={savedProductId}
@@ -239,28 +250,28 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
             </div>
           </div>
 
-          <div className="admin-form__fields">
-            <div className="admin-form-card">
-              <div className="admin-form-card__title">Thông tin cơ bản</div>
+          <div className="flex w-full flex-col gap-[1.125rem]">
+            <div className={CARD}>
+              <div className={CARD_TITLE}>Thông tin cơ bản</div>
 
-              <label className="admin-form-field" htmlFor="product-name">
+              <label className={FORM_FIELD} htmlFor="product-name">
                 Tên sản phẩm
               </label>
               <input
                 id="product-name"
-                className="admin-form-input"
+                className="input mb-4"
                 value={form.name}
                 onChange={(event) => updateField("name", event.target.value)}
               />
 
-              <div className="admin-form-row">
-                <div>
-                  <label className="admin-form-field" htmlFor="product-category">
+              <div className="flex gap-3.5">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-category">
                     Danh mục
                   </label>
                   <select
                     id="product-category"
-                    className="admin-form-select"
+                    className="input mb-4"
                     value={form.categoryId}
                     onChange={(event) => updateField("categoryId", event.target.value)}
                   >
@@ -271,13 +282,13 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="admin-form-field" htmlFor="product-brand">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-brand">
                     Thương hiệu
                   </label>
                   <select
                     id="product-brand"
-                    className="admin-form-select"
+                    className="input mb-4"
                     value={form.brandId}
                     onChange={(event) => updateField("brandId", event.target.value)}
                   >
@@ -290,14 +301,14 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                 </div>
               </div>
 
-              <div className="admin-form-row">
-                <div>
-                  <label className="admin-form-field" htmlFor="product-shape">
+              <div className="flex gap-3.5">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-shape">
                     Kiểu dáng gọng
                   </label>
                   <select
                     id="product-shape"
-                    className="admin-form-select"
+                    className="input mb-4"
                     value={form.frameShape}
                     onChange={(event) =>
                       updateField("frameShape", event.target.value as FrameShape)
@@ -310,8 +321,8 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="admin-form-field" htmlFor="product-price">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-price">
                     Giá (VNĐ)
                   </label>
                   <input
@@ -319,21 +330,21 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     type="number"
                     min="0"
                     step="1000"
-                    className="admin-form-input"
+                    className="input mb-4"
                     value={form.basePrice}
                     onChange={(event) => updateField("basePrice", event.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="admin-form-row">
-                <div>
-                  <label className="admin-form-field" htmlFor="product-gender">
+              <div className="flex gap-3.5">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-gender">
                     Đối tượng
                   </label>
                   <select
                     id="product-gender"
-                    className="admin-form-select"
+                    className="input mb-4"
                     value={form.genderTarget}
                     onChange={(event) =>
                       updateField("genderTarget", event.target.value as GenderTarget)
@@ -346,51 +357,51 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="admin-form-field" htmlFor="product-material">
+                <div className="flex-1">
+                  <label className={FORM_FIELD} htmlFor="product-material">
                     Chất liệu
                   </label>
                   <input
                     id="product-material"
-                    className="admin-form-input"
+                    className="input mb-4"
                     value={form.material}
                     onChange={(event) => updateField("material", event.target.value)}
                   />
                 </div>
               </div>
 
-              <label className="admin-form-field" htmlFor="product-description">
+              <label className={FORM_FIELD} htmlFor="product-description">
                 Mô tả sản phẩm
               </label>
               <textarea
                 id="product-description"
-                className="admin-form-textarea"
+                className="input mb-4 resize-y"
                 rows={4}
                 value={form.description}
                 onChange={(event) => updateField("description", event.target.value)}
               />
 
-              <label className="admin-form-field" htmlFor="product-fit-note">
+              <label className={FORM_FIELD} htmlFor="product-fit-note">
                 Ghi chú độ phù hợp khuôn mặt
               </label>
               <input
                 id="product-fit-note"
-                className="admin-form-input"
+                className="input mb-4"
                 value={form.faceFitNote}
                 onChange={(event) => updateField("faceFitNote", event.target.value)}
               />
             </div>
 
-            <div className="admin-form-card">
-              <div className="admin-form-card__title">Phù hợp với dáng mặt</div>
+            <div className={CARD}>
+              <div className={CARD_TITLE}>Phù hợp với dáng mặt</div>
               <FaceShapeTagPicker
                 selected={form.faceShapes}
                 onChange={(next) => updateField("faceShapes", next)}
               />
             </div>
 
-            <div className="admin-form-card">
-              <div className="admin-form-card__title">Biến thể (màu sắc / kích thước / tồn kho)</div>
+            <div className={CARD}>
+              <div className={CARD_TITLE}>Biến thể (màu sắc / kích thước / tồn kho)</div>
               <ProductVariantsEditor
                 productId={savedProductId}
                 variants={variants}
@@ -399,21 +410,29 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
               />
             </div>
 
-            <div className="admin-form-card admin-form-card--status">
+            <div className={cn(CARD, "flex items-center justify-between gap-4")}>
               <div>
-                <div className="admin-form-card__status-label">Trạng thái bán</div>
-                <div className="admin-form-card__status-hint">
+                <div className="mb-0.5 text-sm font-semibold">Trạng thái bán</div>
+                <div className="text-[0.78rem] text-text-muted">
                   Ẩn sản phẩm khỏi danh mục nếu hết hàng.
                 </div>
               </div>
               <button
                 type="button"
-                className={`admin-toggle${form.status === "PUBLISHED" ? " admin-toggle--on" : ""}`}
+                className={cn(
+                  "relative h-7 w-12 shrink-0 cursor-pointer rounded-full border-0",
+                  isPublished ? "bg-[#4a5a52]" : "bg-[rgba(43,36,32,0.2)]",
+                )}
                 onClick={toggleStatus}
-                aria-pressed={form.status === "PUBLISHED"}
+                aria-pressed={isPublished}
                 aria-label="Trạng thái bán"
               >
-                <span className="admin-toggle__knob" />
+                <span
+                  className={cn(
+                    "absolute top-[3px] h-[22px] w-[22px] rounded-full bg-surface transition-[left] duration-150",
+                    isPublished ? "left-[23px]" : "left-[3px]",
+                  )}
+                />
               </button>
             </div>
           </div>

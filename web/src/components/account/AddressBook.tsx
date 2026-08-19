@@ -3,9 +3,38 @@
 import { useState } from "react";
 import { ApiError, createMyAddress, deleteMyAddress, updateMyAddress } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import type { Address } from "@/types/user";
 
 const PHONE_PATTERN = /^(0|\+84)[0-9]{9,10}$/;
+
+// An address row has exactly three looks, and the component decides which one it renders instead
+// of letting a parent selector decide: a pickable radio row, the picked one, and the read-only
+// card the profile page's "manage" mode shows. Each variant carries its own border colour,
+// background and cursor, so no two class strings compete for the same property.
+const OPTION_BASE =
+  "flex flex-row items-center gap-[0.65rem] rounded-[10px] border px-[0.9rem] py-3 transition-[border-color,box-shadow] duration-[180ms] ease-in-out";
+const OPTION_SELECTABLE = "cursor-pointer border-border bg-[#fffdf9] hover:border-accent";
+const OPTION_SELECTED =
+  "cursor-pointer border-accent bg-white shadow-[0_0_0_3px_rgba(201,123,74,0.13)]";
+const OPTION_STATIC = "cursor-default border-border bg-[#fffdf9]";
+
+const EDIT_BTN =
+  "shrink-0 cursor-pointer self-center rounded-lg border border-border bg-transparent px-[0.7rem] py-[0.3rem] text-[0.78rem] font-semibold text-text-secondary transition-[border-color,color] duration-[180ms] ease-in-out disabled:cursor-not-allowed disabled:opacity-50";
+const EDIT_BTN_NEUTRAL = `${EDIT_BTN} hover:border-accent hover:text-accent-dark`;
+const EDIT_BTN_DANGER = `${EDIT_BTN} hover:border-[#c0392b] hover:text-[#c0392b]`;
+
+// AddressBook is mounted both inside the checkout form and inside the profile page, so it styles
+// its own labels/fields rather than inheriting them from whichever page hosts it.
+const FORM_LABEL = "flex flex-col gap-[0.4rem] text-[0.82rem] font-[650] text-text-secondary";
+const FORM_FIELD =
+  "input min-h-[46px] rounded-[10px] bg-[#fffdf9] px-[0.85rem] py-[0.72rem] text-[0.92rem] focus:bg-white";
+const ADD_FORM =
+  "flex flex-col gap-[0.85rem] rounded-[10px] border border-dashed border-border bg-[#fffdf9] p-[0.9rem]";
+const OPTION_BODY = "flex min-w-0 flex-1 flex-col gap-[0.2rem]";
+const OPTION_NAME = "inline-flex items-center gap-2 text-[0.9rem] font-[650] text-text";
+const OPTION_BADGE =
+  "rounded-full bg-[rgba(201,123,74,0.13)] px-2 py-[0.1rem] text-[0.7rem] font-[650] text-accent-dark";
 
 interface AddressFormValues {
   receiverName: string;
@@ -63,11 +92,12 @@ function AddressFormFields({
 }) {
   return (
     <>
-      <label htmlFor={`${idPrefix}-receiver-name`}>
+      <label htmlFor={`${idPrefix}-receiver-name`} className={FORM_LABEL}>
         Tên người nhận
         <input
           id={`${idPrefix}-receiver-name`}
           type="text"
+          className={FORM_FIELD}
           value={values.receiverName}
           onChange={(event) => onChange({ ...values, receiverName: event.target.value })}
           autoComplete="name"
@@ -75,11 +105,12 @@ function AddressFormFields({
         {errors.receiverName && <span className="field-error">{errors.receiverName}</span>}
       </label>
 
-      <label htmlFor={`${idPrefix}-receiver-phone`}>
+      <label htmlFor={`${idPrefix}-receiver-phone`} className={FORM_LABEL}>
         Số điện thoại
         <input
           id={`${idPrefix}-receiver-phone`}
           type="tel"
+          className={FORM_FIELD}
           value={values.receiverPhone}
           onChange={(event) => onChange({ ...values, receiverPhone: event.target.value })}
           autoComplete="tel"
@@ -87,11 +118,12 @@ function AddressFormFields({
         {errors.receiverPhone && <span className="field-error">{errors.receiverPhone}</span>}
       </label>
 
-      <label htmlFor={`${idPrefix}-line`}>
+      <label htmlFor={`${idPrefix}-line`} className={FORM_LABEL}>
         Địa chỉ giao hàng
         <input
           id={`${idPrefix}-line`}
           type="text"
+          className={FORM_FIELD}
           value={values.address}
           onChange={(event) => onChange({ ...values, address: event.target.value })}
           autoComplete="street-address"
@@ -99,9 +131,10 @@ function AddressFormFields({
         {errors.address && <span className="field-error">{errors.address}</span>}
       </label>
 
-      <label className="address-picker__default-check">
+      <label className="flex cursor-pointer flex-row items-center gap-2 text-[0.85rem] font-medium text-text-secondary">
         <input
           type="checkbox"
+          className="h-4 w-4 cursor-pointer"
           checked={values.isDefault}
           onChange={(event) => onChange({ ...values, isDefault: event.target.checked })}
         />
@@ -233,30 +266,30 @@ export function AddressBook({
   }
 
   if (isLoading) {
-    return <p className="address-picker__loading">Đang tải địa chỉ...</p>;
+    return <p className="text-[0.88rem] text-text-muted">Đang tải địa chỉ...</p>;
   }
 
   const isAddressFormOpen = isAddingAddress || editingAddressId !== null;
   const showAddForm = isAddingAddress || addresses.length === 0;
 
   return (
-    <div className="address-picker">
-      {error && <p className="field-error">{error}</p>}
+    <div className="flex flex-col gap-[0.6rem]">
+      {error && <p className="field-error my-[1em]">{error}</p>}
       {deleteError && (
-        <p role="alert" className="error-state">
+        <p role="alert" className="my-[1em] text-[#a92828]">
           {deleteError}
         </p>
       )}
 
       {addresses.length > 0 && (
         <div
-          className="address-picker__list"
+          className="flex flex-col gap-[0.6rem]"
           role={isPicker ? "radiogroup" : undefined}
           aria-label={isPicker ? "Chọn địa chỉ giao hàng" : undefined}
         >
           {addresses.map((address) =>
             editingAddressId === address.id ? (
-              <div key={address.id} className="address-picker__add-form">
+              <div key={address.id} className={ADD_FORM}>
                 <AddressFormFields
                   idPrefix={`edit-address-${address.id}`}
                   values={addressForm}
@@ -265,15 +298,15 @@ export function AddressBook({
                 />
 
                 {addressFormError && (
-                  <p role="alert" className="error-state">
+                  <p role="alert" className="my-[1em] text-[#a92828]">
                     {addressFormError}
                   </p>
                 )}
 
-                <div className="address-picker__add-form-actions">
+                <div className="flex gap-[0.6rem]">
                   <button
                     type="button"
-                    className="btn btn--primary btn--small"
+                    className="btn btn-primary btn-small"
                     onClick={handleSaveAddressForm}
                     disabled={isSavingAddressForm}
                   >
@@ -281,7 +314,7 @@ export function AddressBook({
                   </button>
                   <button
                     type="button"
-                    className="btn btn--outline btn--small"
+                    className="btn btn-outline btn-small"
                     onClick={closeAddressForm}
                     disabled={isSavingAddressForm}
                   >
@@ -292,32 +325,33 @@ export function AddressBook({
             ) : isPicker ? (
               <label
                 key={address.id}
-                className={
-                  "address-picker__option" +
-                  (!isAddressFormOpen && selectedAddressId === address.id
-                    ? " address-picker__option--selected"
-                    : "")
-                }
+                className={cn(
+                  OPTION_BASE,
+                  !isAddressFormOpen && selectedAddressId === address.id
+                    ? OPTION_SELECTED
+                    : OPTION_SELECTABLE,
+                )}
               >
                 <input
                   type="radio"
                   name="shipping-address"
+                  className="h-4 w-4 shrink-0 cursor-pointer"
                   checked={!isAddressFormOpen && selectedAddressId === address.id}
                   onChange={() => {
                     onSelectAddress?.(address);
                     closeAddressForm();
                   }}
                 />
-                <span className="address-picker__option-body">
-                  <span className="address-picker__option-name">
+                <span className={OPTION_BODY}>
+                  <span className={OPTION_NAME}>
                     {address.receiverName} · {address.receiverPhone}
-                    {address.isDefault && <span className="address-picker__badge">Mặc định</span>}
+                    {address.isDefault && <span className={OPTION_BADGE}>Mặc định</span>}
                   </span>
-                  <span className="address-picker__option-address">{address.address}</span>
+                  <span className="text-[0.82rem] text-text-muted">{address.address}</span>
                 </span>
                 <button
                   type="button"
-                  className="address-picker__edit-btn"
+                  className={EDIT_BTN_NEUTRAL}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -328,21 +362,21 @@ export function AddressBook({
                 </button>
               </label>
             ) : (
-              <div key={address.id} className="address-picker__option address-picker__option--static">
-                <span className="address-picker__option-body">
-                  <span className="address-picker__option-name">
+              <div key={address.id} className={cn(OPTION_BASE, OPTION_STATIC)}>
+                <span className={OPTION_BODY}>
+                  <span className={OPTION_NAME}>
                     {address.receiverName} · {address.receiverPhone}
-                    {address.isDefault && <span className="address-picker__badge">Mặc định</span>}
+                    {address.isDefault && <span className={OPTION_BADGE}>Mặc định</span>}
                   </span>
-                  <span className="address-picker__option-address">{address.address}</span>
+                  <span className="text-[0.82rem] text-text-muted">{address.address}</span>
                 </span>
-                <div className="address-picker__option-actions">
-                  <button type="button" className="address-picker__edit-btn" onClick={() => openEditForm(address)}>
+                <div className="flex shrink-0 self-center gap-2">
+                  <button type="button" className={EDIT_BTN_NEUTRAL} onClick={() => openEditForm(address)}>
                     Sửa
                   </button>
                   <button
                     type="button"
-                    className="address-picker__edit-btn address-picker__edit-btn--danger"
+                    className={EDIT_BTN_DANGER}
                     onClick={() => handleDeleteAddress(address)}
                     disabled={deletingAddressId === address.id}
                   >
@@ -354,14 +388,16 @@ export function AddressBook({
           )}
 
           {isPicker && (
-            <label
-              className={
-                "address-picker__option" + (isAddingAddress ? " address-picker__option--selected" : "")
-              }
-            >
-              <input type="radio" name="shipping-address" checked={isAddingAddress} onChange={openAddForm} />
-              <span className="address-picker__option-body">
-                <span className="address-picker__option-name">Thêm địa chỉ mới</span>
+            <label className={cn(OPTION_BASE, isAddingAddress ? OPTION_SELECTED : OPTION_SELECTABLE)}>
+              <input
+                type="radio"
+                name="shipping-address"
+                className="h-4 w-4 shrink-0 cursor-pointer"
+                checked={isAddingAddress}
+                onChange={openAddForm}
+              />
+              <span className={OPTION_BODY}>
+                <span className={OPTION_NAME}>Thêm địa chỉ mới</span>
               </span>
             </label>
           )}
@@ -371,7 +407,7 @@ export function AddressBook({
       {!isPicker && !showAddForm && (
         <button
           type="button"
-          className="btn btn--outline btn--small address-picker__add-trigger"
+          className="btn btn-outline btn-small self-start"
           onClick={openAddForm}
         >
           Thêm địa chỉ mới
@@ -379,7 +415,7 @@ export function AddressBook({
       )}
 
       {showAddForm && (
-        <div className="address-picker__add-form">
+        <div className={ADD_FORM}>
           <AddressFormFields
             idPrefix="new-address"
             values={addressForm}
@@ -388,15 +424,15 @@ export function AddressBook({
           />
 
           {addressFormError && (
-            <p role="alert" className="error-state">
+            <p role="alert" className="my-[1em] text-[#a92828]">
               {addressFormError}
             </p>
           )}
 
-          <div className="address-picker__add-form-actions">
+          <div className="flex gap-[0.6rem]">
             <button
               type="button"
-              className="btn btn--primary btn--small"
+              className="btn btn-primary btn-small"
               onClick={handleSaveAddressForm}
               disabled={isSavingAddressForm}
             >
@@ -405,7 +441,7 @@ export function AddressBook({
             {addresses.length > 0 && (
               <button
                 type="button"
-                className="btn btn--outline btn--small"
+                className="btn btn-outline btn-small"
                 onClick={closeAddressForm}
                 disabled={isSavingAddressForm}
               >

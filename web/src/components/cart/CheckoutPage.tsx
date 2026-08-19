@@ -17,6 +17,17 @@ import { formatPriceVnd } from "@/lib/format/price";
 // so any non-empty string works. This is the only payment method payment-service supports.
 const PAYMENT_METHODS = [{ value: "CARD", label: "Thanh toán qua thẻ" }];
 
+// Checkout-form field deltas on top of the shared `.input` base (taller minimum, 10px radius,
+// warmer field background) — `focus:bg-white` re-states `.input:focus`'s background, which the
+// inline background utility would otherwise win against.
+const CHECKOUT_LABEL = "flex flex-col gap-[0.4rem] text-[0.82rem] font-[650] text-text-secondary";
+const CHECKOUT_FIELD =
+  "input rounded-[10px] bg-[#fffdf9] px-[0.85rem] py-[0.72rem] text-[0.92rem] focus:bg-white";
+const SUMMARY_ITEM_IMAGE = "h-12 w-12 shrink-0 rounded-lg bg-[#f0f0f0] object-contain";
+const SUMMARY_ITEM_IMAGE_PLACEHOLDER = `${SUMMARY_ITEM_IMAGE} bg-[repeating-linear-gradient(135deg,#ede6d8,#ede6d8_10px,#e4dbc9_10px,#e4dbc9_20px)]`;
+const EMPTY_NOTICE =
+  "rounded-2xl border border-border bg-surface p-[clamp(1.5rem,4vw,2.5rem)] text-center text-text-muted";
+
 // FR2/T17: checkout form + order summary from the current cart. Redirects to the new order's
 // detail page on success and clears the cart badge via dispatchCartChange (order-service itself
 // removes just the checked-out items from the cart server-side — see
@@ -93,14 +104,14 @@ export function CheckoutPage() {
   const allItems = cart?.items ?? [];
 
   if (allItems.length === 0) {
-    return <p className="cart-page__empty">Giỏ hàng của bạn đang trống. Không có gì để thanh toán.</p>;
+    return <p className={EMPTY_NOTICE}>Giỏ hàng của bạn đang trống. Không có gì để thanh toán.</p>;
   }
 
   const items = allItems.filter((item) => selectedVariantIds.includes(item.variantId));
 
   if (items.length === 0) {
     return (
-      <p className="cart-page__empty">
+      <p className={EMPTY_NOTICE}>
         Chưa chọn sản phẩm nào để thanh toán.{" "}
         <Link href="/cart">Quay lại giỏ hàng để chọn sản phẩm</Link>.
       </p>
@@ -113,12 +124,24 @@ export function CheckoutPage() {
     selectedAddressId ?? (addresses.find((address) => address.isDefault) ?? addresses[0])?.id ?? null;
 
   return (
-    <section aria-labelledby="checkout-heading" className="checkout-page">
-      <h1 id="checkout-heading">Thanh toán</h1>
+    <section
+      aria-labelledby="checkout-heading"
+      className="mx-auto max-w-[1050px] py-[clamp(1.5rem,4vw,3rem)]"
+    >
+      <h1
+        id="checkout-heading"
+        className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text"
+      >
+        Thanh toán
+      </h1>
 
-      <div className="checkout-page__layout">
-        <form className="checkout-form" onSubmit={handleSubmit} noValidate>
-          <p className="address-picker__label">Địa chỉ giao hàng</p>
+      <div className="grid grid-cols-[1.4fr_1fr] items-start gap-7 max-[700px]:grid-cols-1">
+        <form
+          className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-[clamp(1.2rem,3vw,1.75rem)] shadow-[0_14px_36px_rgba(43,36,32,0.06)]"
+          onSubmit={handleSubmit}
+          noValidate
+        >
+          <p className="text-[0.82rem] font-[650] text-text-secondary">Địa chỉ giao hàng</p>
 
           <AddressBook
             mode="picker"
@@ -130,19 +153,21 @@ export function CheckoutPage() {
             onSelectAddress={(address) => setSelectedAddressId(address.id)}
           />
 
-          <label htmlFor="checkout-note">
+          <label htmlFor="checkout-note" className={CHECKOUT_LABEL}>
             Ghi chú (không bắt buộc)
             <textarea
               id="checkout-note"
+              className={`${CHECKOUT_FIELD} min-h-[90px] resize-y`}
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
           </label>
 
-          <label htmlFor="checkout-payment-method">
+          <label htmlFor="checkout-payment-method" className={CHECKOUT_LABEL}>
             Phương thức thanh toán
             <select
               id="checkout-payment-method"
+              className={`${CHECKOUT_FIELD} min-h-[46px]`}
               value={paymentMethod}
               onChange={(event) => setPaymentMethod(event.target.value)}
             >
@@ -154,41 +179,53 @@ export function CheckoutPage() {
             </select>
           </label>
 
-          <button type="submit" className="btn btn--primary" disabled={isSubmitting}>
+          <button
+            type="submit"
+            className="btn btn-primary mt-1 min-w-[180px] self-start"
+            disabled={isSubmitting}
+          >
             {isSubmitting ? "Đang đặt hàng..." : "Đặt hàng"}
           </button>
 
           {submitError && (
-            <p role="alert" className="error-state">
+            <p role="alert" className="my-[1em] text-[#a92828]">
               {submitError}
             </p>
           )}
         </form>
 
-        <aside className="checkout-summary" aria-label="Tóm tắt đơn hàng">
-          <h2>Tóm tắt đơn hàng</h2>
-          <ul className="checkout-summary__items">
+        <aside
+          className="rounded-2xl border border-border bg-surface p-[clamp(1.2rem,3vw,1.75rem)] shadow-[0_14px_36px_rgba(43,36,32,0.06)]"
+          aria-label="Tóm tắt đơn hàng"
+        >
+          <h2 className="mb-4 font-heading text-[1.2rem] text-text">Tóm tắt đơn hàng</h2>
+          <ul className="mb-4 flex flex-col gap-[0.65rem]">
             {items.map((item) => (
-              <li key={item.variantId}>
+              <li
+                key={item.variantId}
+                className="flex items-center justify-between gap-3 border-b border-border pb-[0.65rem] text-[0.85rem] text-text-secondary"
+              >
                 {item.productImageUrl ? (
                   <ImageWithFallback
                     src={item.productImageUrl}
                     alt={item.productName}
-                    className="checkout-summary__item-image"
-                    placeholderClassName="checkout-summary__item-image checkout-summary__item-image--placeholder"
+                    className={SUMMARY_ITEM_IMAGE}
+                    placeholderClassName={SUMMARY_ITEM_IMAGE_PLACEHOLDER}
                   />
                 ) : (
-                  <div className="checkout-summary__item-image checkout-summary__item-image--placeholder" />
+                  <div className={SUMMARY_ITEM_IMAGE_PLACEHOLDER} />
                 )}
-                <span className="checkout-summary__item-info">
+                <span className="min-w-0 flex-1">
                   {item.productName} ({item.color}, {item.size}) x{item.quantity}
                 </span>
-                <span>{formatPriceVnd(item.subtotal)}</span>
+                <span className="shrink-0 font-semibold text-text">
+                  {formatPriceVnd(item.subtotal)}
+                </span>
               </li>
             ))}
           </ul>
-          <p className="checkout-summary__total">
-            Tổng cộng: <strong>{formatPriceVnd(totalAmount)}</strong>
+          <p className="pt-1 text-[1.05rem] text-text-secondary">
+            Tổng cộng: <strong className="text-[1.2rem] text-text">{formatPriceVnd(totalAmount)}</strong>
           </p>
         </aside>
       </div>

@@ -5,10 +5,18 @@ import { useState } from "react";
 import { AddToCartModal } from "@/components/cart/AddToCartModal";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { ApiError, getProductById } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatPriceVnd } from "@/lib/format/price";
 import { formatFrameShapeVi } from "@/lib/labels";
 import type { Product } from "@/types/product";
 import type { RecommendedProduct } from "@/types/recommendation";
+
+// "compact" is the face-analysis variant: the cards sit in the narrow result-layout sidebar
+// (~280-340px, capped to the photo column's height), so each one becomes a thumbnail+text row
+// instead of the wide vertical card. This used to be a descendant-selector override scoped to
+// the face-analysis preview wrapper; it is an explicit prop now so nothing depends on the
+// cascade. Passed down by RecommendationGrid — see RecommendationGrid.tsx.
+export type RecommendationCardVariant = "default" | "compact";
 
 interface RecommendationCardProps {
   product: RecommendedProduct;
@@ -17,13 +25,26 @@ interface RecommendationCardProps {
   // that context the primary action is "Thêm vào giỏ hàng" instead of the live-camera "Thử kính
   // AR" — /recommendations (onTryOnPhoto absent) keeps the AR action instead.
   onTryOnPhoto?: (product: RecommendedProduct) => void;
+  variant?: RecommendationCardVariant;
 }
 
 // Same card-style layout as ProductCard, but built for RecommendedProduct's narrower shape
 // (no genderTarget/category/variants — recommendation-service only returns what a card needs
 // plus a ranking `score`), so ProductCard itself isn't reused directly.
-export function RecommendationCard({ product, onTryOnPhoto }: RecommendationCardProps) {
+export function RecommendationCard({
+  product,
+  onTryOnPhoto,
+  variant = "default",
+}: RecommendationCardProps) {
   const thumbnail = product.images.find((image) => image.isThumbnail) ?? product.images[0];
+  const isCompact = variant === "compact";
+
+  // The image doubles as its own "no image / broken image" placeholder — same flat grey box
+  // either way, so ImageWithFallback gets the one class string for both states.
+  const imageClass = cn(
+    "aspect-square bg-[#f0f0f0] object-contain",
+    isCompact ? "h-16 w-16 shrink-0 rounded-[6px]" : "w-full",
+  );
 
   // AddToCartModal needs variants (for color/size selection), which RecommendedProduct doesn't
   // carry — fetch the full Product on demand when the user actually asks to add to cart, rather
@@ -52,37 +73,71 @@ export function RecommendationCard({ product, onTryOnPhoto }: RecommendationCard
   }
 
   return (
-    <div className="product-card">
-      <Link href={`/products/${product.id}`} className="product-card__link">
+    <div
+      className={cn(
+        "flex overflow-hidden border border-border bg-surface",
+        isCompact ? "flex-row flex-wrap rounded-lg p-[0.625rem]" : "flex-col rounded-[6px]",
+      )}
+    >
+      <Link
+        href={`/products/${product.id}`}
+        className={cn(
+          "text-inherit no-underline",
+          isCompact ? "flex w-full gap-3" : "block",
+        )}
+      >
         {thumbnail ? (
           <ImageWithFallback
             src={thumbnail.imageUrl}
             alt={product.name}
-            className="product-card__image"
-            placeholderClassName="product-card__image product-card__image--placeholder"
+            className={imageClass}
+            placeholderClassName={imageClass}
           />
         ) : (
-          <div className="product-card__image product-card__image--placeholder" />
+          <div className={imageClass} />
         )}
-        <div className="product-card__body">
-          <h3 className="product-card__name">{product.name}</h3>
-          <p className="product-card__shape">{formatFrameShapeVi(product.frameShape)}</p>
-          <p className="product-card__price">{formatPriceVnd(product.basePrice)}</p>
+        <div className={isCompact ? "min-w-0 p-0" : "px-4 pt-4"}>
+          <h3
+            className={cn(
+              "font-heading font-semibold text-text",
+              isCompact
+                ? "mb-[0.15rem] overflow-hidden text-ellipsis whitespace-nowrap text-[0.85rem]"
+                : "mb-1 text-[1.05rem]",
+            )}
+          >
+            {product.name}
+          </h3>
+          <p
+            className={cn(
+              "text-text-muted",
+              isCompact ? "mb-1 text-[0.72rem]" : "mb-[0.6rem] text-[0.85rem]",
+            )}
+          >
+            {formatFrameShapeVi(product.frameShape)}
+          </p>
+          <p className={cn("font-semibold", isCompact ? "text-[0.82rem]" : "text-base")}>
+            {formatPriceVnd(product.basePrice)}
+          </p>
         </div>
       </Link>
-      <div className="product-card__actions">
+      <div
+        className={cn(
+          "mt-auto flex",
+          isCompact ? "gap-[0.4rem] px-0 pt-2 pb-0" : "gap-2 px-4 pt-[0.9rem] pb-4",
+        )}
+      >
         {onTryOnPhoto ? (
           <>
             <button
               type="button"
-              className="btn btn--outline btn--small"
+              className="btn btn-outline btn-small"
               onClick={() => onTryOnPhoto(product)}
             >
               Thử lên ảnh này
             </button>
             <button
               type="button"
-              className="btn btn--primary btn--small"
+              className="btn btn-primary btn-small"
               onClick={handleAddToCartClick}
               disabled={isFetchingProduct}
             >
@@ -90,13 +145,13 @@ export function RecommendationCard({ product, onTryOnPhoto }: RecommendationCard
             </button>
           </>
         ) : (
-          <Link href={`/products/${product.id}/try-on`} className="btn btn--primary btn--small">
+          <Link href={`/products/${product.id}/try-on`} className="btn btn-primary btn-small">
             Thử kính AR
           </Link>
         )}
       </div>
       {fetchError && (
-        <p role="alert" className="error-state">
+        <p role="alert" className="my-[1em] text-[#a92828]">
           {fetchError}
         </p>
       )}

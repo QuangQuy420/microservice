@@ -31,18 +31,25 @@ export function RecommendationPreview({ faceShape, onTryOnPhoto }: Recommendatio
   }, [faceShape]);
 
   return (
-    <div className="face-analysis__recommend-preview">
+    <div>
       {isLoading && <LoadingState label="Đang tải gọng kính được gợi ý..." />}
       {!isLoading && error && <ErrorState message={error} />}
       {!isLoading && !error && items.length === 0 && (
-        <p className="product-grid__empty">Chưa có gọng kính nào phù hợp với dáng mặt này.</p>
+        <p className="my-[1em] text-text-muted">Chưa có gọng kính nào phù hợp với dáng mặt này.</p>
       )}
       {!isLoading && !error && items.length > 0 && (
         <>
-          <RecommendationGrid products={items.slice(0, PREVIEW_LIMIT)} onTryOnPhoto={onTryOnPhoto} />
+          {/* The narrow result-layout sidebar (~280-340px) can't fit the full-size card, so each
+              one renders as a compact thumbnail+text row — the old CSS did this with descendant
+              overrides scoped to this wrapper, now a variant the card owns itself. */}
+          <RecommendationGrid
+            products={items.slice(0, PREVIEW_LIMIT)}
+            onTryOnPhoto={onTryOnPhoto}
+            variant="compact"
+          />
           <Link
             href={`/recommendations?faceShape=${faceShape}`}
-            className="face-analysis__recommend-view-all"
+            className="mt-4 inline-flex shrink-0 items-center gap-[0.4rem] font-medium text-text hover:text-accent-dark"
           >
             Xem tất cả gọng kính phù hợp
             <svg

@@ -12,7 +12,8 @@ export default function ShopLayout({
   return (
     <>
       <Header />
-      <main>{children}</main>
+      {/* Ported from the bare `main { ... }` rule the storefront shell used to rely on. */}
+      <main className="mx-auto max-w-[1100px] p-6 max-sm:px-4">{children}</main>
       <Footer />
     </>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
+import { cn } from "@/lib/cn";
 
 interface FaceCameraCaptureProps {
   onConfirm: (file: File) => void;
@@ -14,6 +15,12 @@ const STATUS_HINTS: Partial<Record<string, string>> = {
   idle: "Đang khởi động camera...",
   "requesting-camera": "Đang yêu cầu quyền truy cập camera...",
 };
+
+// `.btn-outline`'s dark text/border (readable on the page's light background) disappears against
+// this overlay, which always sits on top of a photo — flip it to a light outline with a
+// translucent dark fill so it stays legible regardless of what's behind it.
+const OVERLAY_OUTLINE_BUTTON_CLASS =
+  "btn btn-outline btn-small border-[rgba(255,255,255,0.85)] bg-[rgba(28,23,18,0.45)] text-white";
 
 // Renders the "Chụp ảnh" flow: live mirrored camera feed -> "Chụp" -> captured-still review ->
 // "Dùng ảnh này" / "Chụp lại". All getUserMedia/canvas logic lives in useCameraCapture
@@ -77,12 +84,15 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
 
   const isReviewing = status === "captured" && capturedUrl !== null;
   const hint = captureError ?? (status !== "streaming" && !isReviewing ? (STATUS_HINTS[status] ?? errorMessage) : null);
+  const isErrorHint = Boolean(
+    status === "camera-denied" || status === "unsupported" || status === "error" || captureError,
+  );
 
   return (
-    <div className="face-analysis__camera-frame">
+    <div className="relative mx-auto aspect-[3/4] w-full max-w-[380px] overflow-hidden rounded-lg bg-[#1c1712]">
       <video
         ref={videoRef}
-        className="face-analysis__camera-video"
+        className="absolute inset-0 h-full w-full object-cover [transform:scaleX(-1)]"
         style={isReviewing ? { display: "none" } : undefined}
         playsInline
         muted
@@ -90,25 +100,29 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
       />
       {isReviewing && (
         // eslint-disable-next-line @next/next/no-img-element -- local blob object URL from the just-captured File, not a remote/optimizable image
-        <img src={capturedUrl} alt="Ảnh vừa chụp" className="face-analysis__camera-still" />
+        <img
+          src={capturedUrl}
+          alt="Ảnh vừa chụp"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       )}
-      <div className="face-analysis__camera-actions">
+      <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2.5 bg-[image:linear-gradient(to_top,rgba(0,0,0,0.55),transparent)] p-3.5">
         {isReviewing ? (
           <>
-            <button type="button" className="btn btn--outline btn--small" onClick={handleRetake}>
+            <button type="button" className={OVERLAY_OUTLINE_BUTTON_CLASS} onClick={handleRetake}>
               Chụp lại
             </button>
-            <button type="button" className="btn btn--primary btn--small" onClick={handleConfirm}>
+            <button type="button" className="btn btn-primary btn-small" onClick={handleConfirm}>
               Dùng ảnh này
             </button>
           </>
         ) : (
           <>
-            <button type="button" className="btn btn--outline btn--small" onClick={handleCancel}>
+            <button type="button" className={OVERLAY_OUTLINE_BUTTON_CLASS} onClick={handleCancel}>
               Hủy
             </button>
             {status === "streaming" && (
-              <button type="button" className="btn btn--primary btn--small" onClick={handleCapture}>
+              <button type="button" className="btn btn-primary btn-small" onClick={handleCapture}>
                 Chụp
               </button>
             )}
@@ -118,11 +132,10 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
       {hint && (
         <p
           role="status"
-          className={`face-analysis__camera-hint${
-            status === "camera-denied" || status === "unsupported" || status === "error" || captureError
-              ? " face-analysis__camera-hint--error"
-              : ""
-          }`}
+          className={cn(
+            "absolute top-3.5 right-3.5 left-3.5 text-center text-[0.8rem]",
+            isErrorHint ? "text-[#e8a583]" : "text-[#f7f3ec]",
+          )}
         >
           {hint}
         </p>

@@ -10,6 +10,7 @@ import { LoadingState } from "@/components/common/LoadingState";
 import { useFaceAnalysis } from "@/hooks/useFaceAnalysis";
 import { useStaticFaceOverlay } from "@/hooks/useStaticFaceOverlay";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import { formatFaceShapeVi } from "@/lib/labels";
 import { FaceCameraCapture } from "./FaceCameraCapture";
 import { RecommendationPreview } from "./RecommendationPreview";
@@ -31,22 +32,37 @@ const MEASUREMENT_FIELDS: { key: keyof FaceMeasurements; label: string }[] = [
 // 0-1.5 range in practice.
 const MEASUREMENT_BAR_MAX = 1.5;
 
+// The page is a stack of identical surface cards; `mb-5` is added per call site because the card
+// inside the two-column result layout must not carry it (the grid's own gap spaces that row, and
+// a trailing margin would inflate the height FaceAnalysisPage measures off the photo column).
+const CARD_CLASS = "rounded-[10px] border border-border bg-surface px-6 py-5";
+
+const SECTION_LABEL_CLASS =
+  "mb-3.5 text-[0.8rem] font-semibold tracking-[0.06em] text-text-muted uppercase";
+
+const RESULT_LABEL_CLASS =
+  "mb-[0.125rem] text-[0.78rem] tracking-[0.06em] text-text-muted uppercase";
+
+// Diagonal "no image" weave, shared by the preview box and each history thumbnail.
+const PHOTO_PLACEHOLDER_BG =
+  "bg-[image:repeating-linear-gradient(135deg,#ede6d8,#ede6d8_12px,#e4dbc9_12px,#e4dbc9_24px)]";
+
 // Shared between the current result and each history item — both render the same 7-field
 // measurement grid from a FaceMeasurements object.
 function MeasurementsGrid({ measurements }: { measurements: FaceMeasurements }) {
   return (
-    <div className="face-analysis__measurements-grid">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-5 gap-y-3.5">
       {MEASUREMENT_FIELDS.map(({ key, label }) => {
         const value = measurements[key];
         const pct = Math.min(100, Math.round((value / MEASUREMENT_BAR_MAX) * 100));
         return (
           <div key={key}>
-            <div className="face-analysis__measurement-row">
-              <span className="face-analysis__measurement-label">{label}</span>
-              <span className="face-analysis__measurement-value">{value.toFixed(3)}</span>
+            <div className="mb-1.5 flex items-baseline justify-between text-[0.875rem]">
+              <span className="text-[#3a322c]">{label}</span>
+              <span className="font-semibold">{value.toFixed(3)}</span>
             </div>
-            <div className="face-analysis__measurement-bar">
-              <div className="face-analysis__measurement-bar-fill" style={{ width: `${pct}%` }} />
+            <div className="h-[5px] overflow-hidden rounded-[3px] bg-[rgba(43,36,32,0.08)]">
+              <div className="h-full rounded-[3px] bg-accent" style={{ width: `${pct}%` }} />
             </div>
           </div>
         );
@@ -280,11 +296,14 @@ export function FaceAnalysisPage() {
   // safe) case where redirect is blocked.
   if (authChecked && !isAuthenticated) {
     return (
-      <section aria-labelledby="face-analysis-heading" className="face-analysis">
-        <h1 id="face-analysis-heading" className="face-analysis__title">
+      <section aria-labelledby="face-analysis-heading" className="mx-auto max-w-[1050px]">
+        <h1
+          id="face-analysis-heading"
+          className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
+        >
           Phân tích khuôn mặt
         </h1>
-        <p className="face-analysis__subtitle">
+        <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
           Vui lòng <Link href="/login">đăng nhập</Link> để tải ảnh lên và xem kết quả phân tích
           dáng khuôn mặt của bạn.
         </p>
@@ -297,10 +316,10 @@ export function FaceAnalysisPage() {
   // (showResultLayout) — the recommendations column must sit beside this card, not beside the
   // measurements list below it.
   const uploadCard = (
-    <div className="face-analysis__card">
-      <p className="face-analysis__section-label">Chọn ảnh</p>
-      <div className="face-analysis__upload-row">
-        <label className="face-analysis__file-button">
+    <div className={cn(CARD_CLASS, showResultLayout ? "mb-0" : "mb-5")}>
+      <p className={SECTION_LABEL_CLASS}>Chọn ảnh</p>
+      <div className="mb-[1.125rem] flex flex-wrap items-center gap-3">
+        <label className="relative cursor-pointer overflow-hidden rounded-[2px] bg-text px-[1.125rem] py-2.5 text-[0.84rem] font-medium text-surface">
           Chọn tệp
           <input
             type="file"
@@ -308,34 +327,40 @@ export function FaceAnalysisPage() {
             disabled={isLoading || photoSource === "camera"}
             onChange={handleFileChange}
             aria-label="Tải lên ảnh khuôn mặt"
+            className="absolute inset-0 cursor-pointer opacity-0"
           />
         </label>
         <button
           type="button"
-          className="face-analysis__camera-button"
+          className="cursor-pointer rounded-[2px] border-[1.5px] border-text bg-transparent px-[1.125rem] py-2.5 text-[0.84rem] font-medium text-text disabled:cursor-not-allowed disabled:opacity-55"
           disabled={isLoading || photoSource === "camera"}
           onClick={() => setPhotoSource("camera")}
         >
           Chụp ảnh
         </button>
-        <span className="face-analysis__file-name">{fileName ?? "Chưa chọn tệp nào"}</span>
+        <span className="text-[0.84rem] text-text-muted">{fileName ?? "Chưa chọn tệp nào"}</span>
       </div>
-      <div className="face-analysis__preview-frame">
+      <div className="rounded-lg border-[1.5px] border-dashed border-[rgba(43,36,32,0.28)] p-2">
         {photoSource === "camera" ? (
           <FaceCameraCapture onConfirm={handleCameraConfirm} onCancel={handleCameraCancel} />
         ) : (
-          <div className="face-analysis__preview-box">
+          <div
+            className={cn(
+              "mx-auto flex aspect-[3/4] w-full max-w-[380px] items-center justify-center overflow-hidden rounded-lg",
+              PHOTO_PLACEHOLDER_BG,
+            )}
+          >
             {selectedFrame ? (
-              <canvas ref={overlayCanvasRef} className="face-analysis__preview-image" />
+              <canvas ref={overlayCanvasRef} className="block h-full w-full object-cover" />
             ) : displayImageUrl ? (
               <ImageWithFallback
                 src={displayImageUrl}
                 alt="Ảnh khuôn mặt đã tải lên"
-                className="face-analysis__preview-image"
-                placeholderClassName="face-analysis__preview-image face-analysis__preview-placeholder"
+                className="block h-full w-full object-cover"
+                placeholderClassName="block h-full w-full object-cover p-4 text-center text-[0.8rem] text-text-muted"
               />
             ) : (
-              <p className="face-analysis__preview-placeholder">
+              <p className="p-4 text-center text-[0.8rem] text-text-muted">
                 Kéo thả ảnh chân dung vào đây, hoặc bấm Chọn tệp
               </p>
             )}
@@ -343,9 +368,9 @@ export function FaceAnalysisPage() {
         )}
       </div>
       {selectedFrame && (
-        <div className="face-analysis__tryon-bar">
+        <div className="mt-3 flex items-center justify-between gap-3">
           {overlayStatus !== "ready" && (
-            <p role="status" className="face-analysis__tryon-hint">
+            <p role="status" className="text-[0.8rem] text-text-secondary">
               {overlayStatus === "no-face" || overlayStatus === "multiple-faces" || overlayStatus === "error"
                 ? overlayErrorMessage
                 : TRY_ON_STATUS_HINTS[overlayStatus]}
@@ -353,14 +378,14 @@ export function FaceAnalysisPage() {
           )}
           <button
             type="button"
-            className="btn btn--outline btn--small"
+            className="btn btn-outline btn-small"
             onClick={() => setSelectedFrame(null)}
           >
             Xem ảnh gốc
           </button>
         </div>
       )}
-      <p className="face-analysis__privacy-note">
+      <p className="mt-3.5 flex items-start gap-2 text-[0.78rem] leading-[1.5] text-text-muted">
         <svg
           width="15"
           height="15"
@@ -378,12 +403,17 @@ export function FaceAnalysisPage() {
   );
 
   return (
-    <section aria-labelledby="face-analysis-heading" className="face-analysis">
-      <p className="face-analysis__eyebrow">Công cụ phân tích</p>
-      <h1 id="face-analysis-heading" className="face-analysis__title">
+    <section aria-labelledby="face-analysis-heading" className="mx-auto max-w-[1050px]">
+      <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.1em] text-text-muted uppercase">
+        Công cụ phân tích
+      </p>
+      <h1
+        id="face-analysis-heading"
+        className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
+      >
         Phân tích khuôn mặt
       </h1>
-      <p className="face-analysis__subtitle">
+      <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
         Tải lên 1 ảnh chân dung để tìm dáng khuôn mặt và các số đo liên quan — dùng làm cơ sở để
         gợi ý gọng kính phù hợp.
       </p>
@@ -398,41 +428,45 @@ export function FaceAnalysisPage() {
           {/* Top: photo + recommendations side by side, so trying on a suggestion needs no
               scrolling. Shape/confidence + measurements move below, full-width, since they're
               read-once info rather than something to click while looking at the photo. */}
-          <div className="face-analysis__result-layout">
-            <div className="face-analysis__result-column" ref={photoColumnRef}>
+          <div className="grid grid-cols-[1fr_minmax(280px,340px)] items-start gap-5 max-[900px]:grid-cols-1">
+            <div className="min-w-0" ref={photoColumnRef}>
               {uploadCard}
             </div>
 
-            <div className="face-analysis__recommend-column">
+            <div className="min-w-0">
               <div
-                className="face-analysis__card"
+                className={cn(CARD_CLASS, "mb-5 flex flex-col overflow-y-auto")}
                 ref={recommendCardRef}
                 style={{ maxHeight: recommendMaxHeight ?? undefined }}
               >
-                <p className="face-analysis__section-label">Gọng kính gợi ý cho bạn</p>
+                <p className={SECTION_LABEL_CLASS}>Gọng kính gợi ý cho bạn</p>
                 <RecommendationPreview faceShape={activeResult.faceShape} onTryOnPhoto={setSelectedFrame} />
               </div>
             </div>
           </div>
 
-          <div className="face-analysis__card face-analysis__result-card">
-            <div className="face-analysis__result-icon" aria-hidden="true">
+          <div className={cn(CARD_CLASS, "mb-5 flex flex-wrap items-center gap-3.5")}>
+            <div
+              className="flex size-[52px] shrink-0 items-center justify-center rounded-full bg-text"
+              aria-hidden="true"
+            >
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F7F3EC" strokeWidth="1.6">
                 <ellipse cx="12" cy="12" rx="6.5" ry="9" />
               </svg>
             </div>
-            <div className="face-analysis__result-shape">
-              <p className="face-analysis__result-label">Dáng khuôn mặt</p>
-              <p className="face-analysis__result-value">{formatFaceShapeVi(activeResult.faceShape)}</p>
+            <div className="min-w-[180px] flex-1">
+              <p className={RESULT_LABEL_CLASS}>Dáng khuôn mặt</p>
+              <p className="font-heading text-[1.4rem] font-semibold">
+                {formatFaceShapeVi(activeResult.faceShape)}
+              </p>
             </div>
-            <div className="face-analysis__result-confidence">
-              <p className="face-analysis__result-label">Độ tin cậy</p>
+            <div className="text-right">
+              <p className={RESULT_LABEL_CLASS}>Độ tin cậy</p>
               <p
-                className={`face-analysis__confidence-value ${
-                  isLowConfidence
-                    ? "face-analysis__confidence-value--low"
-                    : "face-analysis__confidence-value--high"
-                }`}
+                className={cn(
+                  "text-[1.4rem] font-semibold",
+                  isLowConfidence ? "text-accent" : "text-[#4a5a52]",
+                )}
               >
                 {confidencePct}%
               </p>
@@ -440,7 +474,7 @@ export function FaceAnalysisPage() {
           </div>
 
           {isLowConfidence && (
-            <div className="face-analysis__hint">
+            <div className="mb-5 flex items-start gap-2 rounded-lg bg-[rgba(201,123,74,0.1)] px-3.5 py-3 text-[0.8rem] leading-[1.5] text-text-secondary">
               <svg
                 width="15"
                 height="15"
@@ -460,56 +494,63 @@ export function FaceAnalysisPage() {
             </div>
           )}
 
-          <div className="face-analysis__card">
-            <p className="face-analysis__section-label">Số đo khuôn mặt</p>
+          <div className={cn(CARD_CLASS, "mb-5")}>
+            <p className={SECTION_LABEL_CLASS}>Số đo khuôn mặt</p>
             <MeasurementsGrid measurements={activeResult.measurements} />
           </div>
         </>
       )}
 
-      <div className="face-analysis__card">
-        <p className="face-analysis__section-label">Lịch sử phân tích của bạn</p>
+      <div className={cn(CARD_CLASS, "mb-5")}>
+        <p className={SECTION_LABEL_CLASS}>Lịch sử phân tích của bạn</p>
         {historyLoading && <LoadingState label="Đang tải lịch sử phân tích của bạn..." />}
         {!historyLoading && historyError && <ErrorState message={historyError} />}
         {!historyLoading && !historyError && deleteError && <ErrorState message={deleteError} />}
         {!historyLoading && !historyError && history.length === 0 && (
-          <p className="face-analysis__preview-placeholder">
+          <p className="p-4 text-center text-[0.8rem] text-text-muted">
             Bạn chưa phân tích ảnh nào.
           </p>
         )}
         {!historyLoading && !historyError && history.length > 0 && (
-          <div className="face-analysis__history-list">
+          <div className="flex flex-col gap-3">
             {history.map((item) => (
-              <div key={item.id} className="face-analysis__history-item">
-                <div className="face-analysis__history-top">
-                  <div className="face-analysis__history-thumb">
+              <div
+                key={item.id}
+                className="rounded-lg border border-[rgba(43,36,32,0.1)] p-2.5"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className={cn("size-[72px] shrink-0 overflow-hidden rounded-lg", PHOTO_PLACEHOLDER_BG)}>
                     <ImageWithFallback
                       src={item.imageUrl}
                       alt="Ảnh khuôn mặt đã phân tích trước đó"
-                      className="face-analysis__history-thumb-image"
-                      placeholderClassName="face-analysis__history-thumb-image face-analysis__history-thumb-placeholder"
+                      className="block h-full w-full object-cover"
+                      placeholderClassName="block h-full w-full object-cover"
                     />
                   </div>
-                  <div className="face-analysis__history-details">
+                  <div className="flex min-w-0 flex-1 gap-6">
                     <div>
-                      <p className="face-analysis__result-label">Dáng khuôn mặt</p>
-                      <p className="face-analysis__history-value">{formatFaceShapeVi(item.faceShape)}</p>
+                      <p className={RESULT_LABEL_CLASS}>Dáng khuôn mặt</p>
+                      <p className="font-heading text-[1.05rem] font-semibold">
+                        {formatFaceShapeVi(item.faceShape)}
+                      </p>
                     </div>
                     <div>
-                      <p className="face-analysis__result-label">Độ tin cậy</p>
-                      <p className="face-analysis__history-value">{Math.round(item.confidence * 100)}%</p>
+                      <p className={RESULT_LABEL_CLASS}>Độ tin cậy</p>
+                      <p className="font-heading text-[1.05rem] font-semibold">
+                        {Math.round(item.confidence * 100)}%
+                      </p>
                     </div>
                   </div>
                   <button
                     type="button"
-                    className="btn btn--outline btn--small"
+                    className="btn btn-outline btn-small"
                     onClick={() => setSelectedHistoryItem(item)}
                   >
                     Xem lại
                   </button>
                   <button
                     type="button"
-                    className="btn btn--outline btn--small"
+                    className="btn btn-outline btn-small"
                     onClick={() => handleDeleteHistoryItem(item.id)}
                     disabled={deletingId === item.id}
                   >

@@ -58,7 +58,11 @@ export function AdminGuard({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   if (checking) {
-    return <main className="admin-auth-check"><p>Đang kiểm tra quyền quản trị...</p></main>;
+    return (
+      <main className="grid min-h-screen max-w-none place-items-center bg-bg p-6 text-text-muted max-[900px]:px-4">
+        <p className="my-[1em]">Đang kiểm tra quyền quản trị...</p>
+      </main>
+    );
   }
 
   if (!profile) return null;

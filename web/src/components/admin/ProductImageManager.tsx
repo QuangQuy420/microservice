@@ -8,8 +8,11 @@ import {
   uploadProductImage,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import type { ProductImage } from "@/types/product";
+
+const IMAGE = "block aspect-square w-full object-contain";
 
 interface ProductImageManagerProps {
   productId: string | null;
@@ -40,6 +43,7 @@ export function ProductImageManager({
   const [error, setError] = useState<string | null>(null);
 
   const isFull = imageList.length >= maxCount;
+  const isUploadDisabled = !productId || isUploading || isFull;
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -129,24 +133,29 @@ export function ProductImageManager({
   }
 
   return (
-    <div className="product-image-manager">
+    <div>
       {imageList.length > 0 && (
-        <ul className="product-image-manager__grid">
+        <ul className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
           {imageList.map((image) => (
-            <li key={image.id} className="product-image-manager__item">
+            <li
+              key={image.id}
+              className="relative overflow-hidden rounded-lg border border-border bg-[image:repeating-linear-gradient(135deg,#ede6d8,#ede6d8_12px,#e4dbc9_12px,#e4dbc9_24px)]"
+            >
               <ImageWithFallback
                 src={image.imageUrl}
                 alt="Ảnh sản phẩm"
-                className="product-image-manager__image"
-                placeholderClassName="product-image-manager__image product-image-manager__image--placeholder"
+                className={IMAGE}
+                placeholderClassName={IMAGE}
               />
               {image.isThumbnail && (
-                <span className="product-image-manager__badge">Ảnh đại diện</span>
+                <span className="absolute top-[0.4rem] left-[0.4rem] rounded-full bg-text px-[0.45rem] py-[0.15rem] text-[0.7rem] font-semibold text-surface">
+                  Ảnh đại diện
+                </span>
               )}
-              <div className="product-image-manager__actions">
+              <div className="flex flex-col gap-[0.35rem] p-2">
                 <button
                   type="button"
-                  className="btn btn--outline btn--small"
+                  className="btn btn-outline btn-small"
                   onClick={() => handleSetThumbnail(image.id)}
                   disabled={image.isThumbnail || busyImageId === image.id}
                 >
@@ -154,7 +163,7 @@ export function ProductImageManager({
                 </button>
                 <button
                   type="button"
-                  className="btn btn--outline btn--small"
+                  className="btn btn-outline btn-small"
                   onClick={() => handleDelete(image.id)}
                   disabled={busyImageId === image.id}
                 >
@@ -167,24 +176,29 @@ export function ProductImageManager({
       )}
 
       <label
-        className={`product-image-manager__upload${
-          !productId || isUploading || isFull ? " product-image-manager__upload--disabled" : ""
-        }`}
+        className={cn(
+          "relative inline-flex items-center justify-center rounded-lg border border-dashed border-border px-[0.9rem] py-2 text-[0.85rem] text-text-secondary",
+          isUploadDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        )}
       >
         <span>{isUploading ? "Đang tải lên…" : "Tải ảnh lên"}</span>
         <input
           type="file"
+          className={cn(
+            "absolute inset-0 opacity-0",
+            isUploadDisabled ? "cursor-not-allowed" : "cursor-pointer",
+          )}
           accept="image/jpeg,image/png,image/webp"
           multiple
-          disabled={!productId || isUploading || isFull}
+          disabled={isUploadDisabled}
           onChange={handleFileChange}
           aria-label="Tải ảnh lên"
         />
       </label>
       {isFull && (
-        <p className="admin-table__tag">Đã đạt số lượng ảnh tối đa ({maxCount} ảnh).</p>
+        <p className="text-xs text-text-muted">Đã đạt số lượng ảnh tối đa ({maxCount} ảnh).</p>
       )}
-      {error && <p className="field-error">{error}</p>}
+      {error && <p className="field-error my-[1em]">{error}</p>}
     </div>
   );
 }

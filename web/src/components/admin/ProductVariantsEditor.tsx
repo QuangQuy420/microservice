@@ -3,8 +3,17 @@
 import { useState } from "react";
 import { ApiError, createVariant, deleteVariant, updateVariant } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
+import { cn } from "@/lib/cn";
 import type { ProductImage, ProductVariant } from "@/types/product";
 import { ProductImageManager } from "./ProductImageManager";
+
+const ROW =
+  "grid grid-cols-[1.2fr_0.8fr_1fr_0.8fr_150px] items-start gap-3 px-[1.1rem] py-3 text-inherit no-underline";
+const ROW_HEAD =
+  "bg-[rgba(43,36,32,0.04)] text-xs font-semibold tracking-[0.05em] text-text-muted uppercase";
+const ROW_BODY = "border-t border-[rgba(43,36,32,0.08)] text-sm";
+const COLOR_PICKER =
+  "h-9 w-9 shrink-0 cursor-pointer rounded-md border border-border bg-surface p-[2px]";
 
 interface ProductVariantsEditorProps {
   productId: string | null;
@@ -77,13 +86,13 @@ export function ProductVariantsEditor({
   onChange,
 }: ProductVariantsEditorProps) {
   if (!productId) {
-    return <p className="admin-table__tag">Lưu sản phẩm trước để quản lý biến thể.</p>;
+    return <p className="text-xs text-text-muted">Lưu sản phẩm trước để quản lý biến thể.</p>;
   }
 
   return (
-    <div className="admin-variant-editor">
-      <div className="admin-table">
-        <div className="admin-table__row admin-table__row--variants admin-table__row--head">
+    <div className="flex flex-col gap-3">
+      <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <div className={cn(ROW, ROW_HEAD)}>
           <span>Màu sắc</span>
           <span>Kích thước</span>
           <span>Giá thêm</span>
@@ -105,7 +114,9 @@ export function ProductVariantsEditor({
           />
         ))}
         {variants.length === 0 && (
-          <div className="admin-table__empty">Chưa có biến thể nào.</div>
+          <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
+            Chưa có biến thể nào.
+          </div>
         )}
       </div>
       <NewVariantRow
@@ -175,31 +186,31 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
   }
 
   return (
-    <div className="admin-variant-row-group">
-      <div className="admin-table__row admin-table__row--variants admin-table__row--body">
-        <div className="admin-variant-row__color">
+    <div className="flex flex-col">
+      <div className={cn(ROW, ROW_BODY)}>
+        <div className="flex items-center gap-[0.4rem]">
           <input
-            className="admin-form-input"
+            className="input flex-1"
             value={draft.color}
             onChange={(event) => updateDraft("color", event.target.value)}
             aria-label="Màu sắc"
           />
           <input
             type="color"
-            className="admin-variant-row__color-picker"
+            className={COLOR_PICKER}
             value={draft.colorHex}
             onChange={(event) => updateDraft("colorHex", event.target.value)}
             aria-label="Mã màu"
           />
         </div>
         <input
-          className="admin-form-input"
+          className="input"
           value={draft.size}
           onChange={(event) => updateDraft("size", event.target.value)}
           aria-label="Kích thước"
         />
         <input
-          className="admin-form-input"
+          className="input"
           type="number"
           min="0"
           step="1000"
@@ -208,7 +219,7 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
           aria-label="Giá thêm"
         />
         <input
-          className="admin-form-input"
+          className="input"
           type="number"
           min="0"
           step="1"
@@ -216,10 +227,10 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
           onChange={(event) => updateDraft("stock", event.target.value)}
           aria-label="Tồn kho"
         />
-        <div className="admin-variant-row__actions">
+        <div className="flex gap-2">
           <button
             type="button"
-            className="btn btn--outline btn--small"
+            className="btn btn-outline btn-small"
             onClick={handleSave}
             disabled={isSaving || isDeleting}
           >
@@ -227,16 +238,16 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
           </button>
           <button
             type="button"
-            className="btn btn--outline btn--small"
+            className="btn btn-outline btn-small"
             onClick={handleDelete}
             disabled={isSaving || isDeleting}
           >
             {isDeleting ? "Đang xoá…" : "Xoá"}
           </button>
         </div>
-        {error && <p className="field-error">{error}</p>}
+        {error && <p className="field-error my-[1em]">{error}</p>}
       </div>
-      <div className="admin-variant-row__images">
+      <div className="px-[1.1rem] pt-3 pb-4">
         <ProductImageManager
           productId={productId}
           variantId={variant.id}
@@ -287,10 +298,10 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
   }
 
   return (
-    <div className="admin-variant-row admin-variant-row--new">
-      <div className="admin-variant-row__color">
+    <div className="grid grid-cols-[1.2fr_0.8fr_1fr_0.8fr_150px] items-start gap-3">
+      <div className="flex items-center gap-[0.4rem]">
         <input
-          className="admin-form-input"
+          className="input flex-1"
           placeholder="Màu sắc"
           value={draft.color}
           onChange={(event) => updateDraft("color", event.target.value)}
@@ -298,21 +309,21 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
         />
         <input
           type="color"
-          className="admin-variant-row__color-picker"
+          className={COLOR_PICKER}
           value={draft.colorHex}
           onChange={(event) => updateDraft("colorHex", event.target.value)}
           aria-label="Mã màu biến thể mới"
         />
       </div>
       <input
-        className="admin-form-input"
+        className="input"
         placeholder="Kích thước"
         value={draft.size}
         onChange={(event) => updateDraft("size", event.target.value)}
         aria-label="Kích thước biến thể mới"
       />
       <input
-        className="admin-form-input"
+        className="input"
         type="number"
         min="0"
         step="1000"
@@ -322,7 +333,7 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
         aria-label="Giá thêm biến thể mới"
       />
       <input
-        className="admin-form-input"
+        className="input"
         type="number"
         min="0"
         step="1"
@@ -333,14 +344,14 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
       />
       <button
         type="button"
-        className="btn btn--primary btn--small"
+        className="btn btn-primary btn-small"
         onClick={handleAdd}
         disabled={isSaving}
       >
         {isSaving ? "Đang thêm…" : "Thêm biến thể"}
       </button>
-      {error && <p className="field-error">{error}</p>}
-      <p className="admin-table__tag admin-variant-row__hint">
+      {error && <p className="field-error my-[1em]">{error}</p>}
+      <p className="col-span-full text-xs text-text-muted">
         Thêm biến thể trước để tải ảnh riêng cho biến thể này.
       </p>
     </div>

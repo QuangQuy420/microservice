@@ -7,11 +7,11 @@ interface ProductGridProps {
 
 export function ProductGrid({ products }: ProductGridProps) {
   if (products.length === 0) {
-    return <p className="product-grid__empty">Không tìm thấy sản phẩm nào.</p>;
+    return <p className="my-[1em] text-text-muted">Không tìm thấy sản phẩm nào.</p>;
   }
 
   return (
-    <div className="product-grid">
+    <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-7">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}
