@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ApiError, getRecommendations } from "@/lib/api";
+import { getRecommendations, useApiError } from "@/lib/api";
 import type { FaceShapeTag } from "@/types/product";
 import type { RecommendedProduct } from "@/types/recommendation";
 
@@ -18,6 +18,7 @@ export function useRecommendations(): UseRecommendationsResult {
   const [items, setItems] = useState<RecommendedProduct[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const translateError = useApiError();
 
   // Callers (RecommendationPreview, RecommendationsPage) re-call `recommend()` whenever their
   // `faceShape` changes — a request-generation counter (bumped on every call AND on unmount)
@@ -39,13 +40,11 @@ export function useRecommendations(): UseRecommendationsResult {
     try {
       const response = await getRecommendations(faceShape);
       if (requestId !== latestRequestId.current) return;
-      setItems(response.items);
+      setItems(response);
     } catch (err) {
       if (requestId !== latestRequestId.current) return;
       setItems([]);
-      setError(
-        err instanceof ApiError ? err.message : "Không thể tải danh sách gọng kính gợi ý.",
-      );
+      setError(translateError(err));
     } finally {
       if (requestId === latestRequestId.current) setIsLoading(false);
     }

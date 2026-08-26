@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AddToCartModal } from "@/components/cart/AddToCartModal";
 import { ErrorState } from "@/components/common/ErrorState";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
@@ -11,19 +12,10 @@ import { useProduct } from "@/hooks/useProduct";
 import { useProducts } from "@/hooks/useProducts";
 
 interface TryOnPageProps {
-  // Omitted for the camera-first landing state (nav's "Thử Kính" tab, no product chosen yet) —
-  // present when arriving from a specific product's "Thử kính AR" button.
+  // Omitted for the camera-first landing state (the nav's try-on tab, no product chosen yet) —
+  // present when arriving from a specific product's AR try-on button.
   id?: string;
 }
-
-// Vietnamese hint shown for each non-"tracking" status, mirroring
-// face_shape_service.py's MultipleFacesDetectedError wording style (AC5).
-const STATUS_HINTS: Partial<Record<string, string>> = {
-  "requesting-camera": "Đang yêu cầu quyền truy cập camera...",
-  "loading-model": "Đang tải mô hình nhận diện khuôn mặt...",
-  "no-face": "Không phát hiện khuôn mặt nào. Vui lòng nhìn thẳng vào camera.",
-  "multiple-faces": "Phát hiện nhiều hơn 1 khuôn mặt. Vui lòng chỉ để 1 người trong khung hình.",
-};
 
 // How many other products to offer in the switcher/picker strip.
 const SWITCHER_LIMIT = 8;
@@ -39,6 +31,16 @@ const SWITCHER_IMAGE_CLASS =
 // Thin page component: only wires the product fetch + camera/canvas elements together. All
 // MediaPipe/canvas frame-processing logic lives in useFaceTracking (coder.md §4).
 export function TryOnPage({ id }: TryOnPageProps) {
+  const t = useTranslations("tryon");
+  // Hint shown for each non-"tracking" status, mirroring face_shape_service.py's
+  // MultipleFacesDetectedError wording style (AC5). Built inside the component because the text
+  // comes from the translations.
+  const statusHints: Partial<Record<string, string>> = {
+    "requesting-camera": t("status.requestingCamera"),
+    "loading-model": t("status.loadingModel"),
+    "no-face": t("status.noFace"),
+    "multiple-faces": t("status.multipleFaces"),
+  };
   // `activeId` starts at whatever product the user arrived with (null when landing on the tab
   // directly, with no product chosen yet). Picking a frame from the strip below only updates
   // this local state — it never navigates, so the <video>/<canvas> below (and the camera
@@ -46,7 +48,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
   // pick/switch instead of re-requesting camera permission each time.
   const [activeId, setActiveId] = useState<string | null>(id ?? null);
   const { product, isLoading, error } = useProduct(activeId);
-  const { products: otherProducts } = useProducts({ limit: SWITCHER_LIMIT });
+  const { products: otherProducts } = useProducts({ pageSize: SWITCHER_LIMIT });
   const [isAddToCartOpen, setIsAddToCartOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -57,7 +59,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
     videoRef,
     canvasRef,
     overlayImageUrl: thumbnail?.imageUrl ?? null,
-    // Camera-first (Q: "Thử Kính" nav tab): the camera starts right away even with no frame
+    // Camera-first (Q: the try-on nav tab): the camera starts right away even with no frame
     // picked yet — useFaceTracking already no-ops the draw step whenever overlayImageUrl is
     // null, so this just shows a plain live tracking preview until a frame is chosen.
     enabled: true,
@@ -81,10 +83,10 @@ export function TryOnPage({ id }: TryOnPageProps) {
   }
 
   if (!hasShownCamera) {
-    // Only a chosen product (activeId set, e.g. arrived via a product's "Thử kính AR" button)
+    // Only a chosen product (activeId set, e.g. arrived via a product's AR try-on button)
     // can fail to load — landing on the tab with no product picked at all is not an error
     // state, so it's excluded here rather than blocking the whole camera-first page.
-    if (activeId && isLoading && !product) return <LoadingState label="Đang tải sản phẩm..." />;
+    if (activeId && isLoading && !product) return <LoadingState label={t("loadingProduct")} />;
     if (activeId && error && !product) return <ErrorState message={error} />;
   }
 
@@ -95,7 +97,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
 
   const hint = status === "camera-denied" || status === "unsupported" || status === "error"
     ? errorMessage
-    : STATUS_HINTS[status];
+    : statusHints[status];
 
   const switchableProducts = otherProducts.filter((item) => item.id !== activeId);
 
@@ -109,23 +111,21 @@ export function TryOnPage({ id }: TryOnPageProps) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
-          Về trang sản phẩm
+          {t("backToProduct")}
         </Link>
       )}
 
       <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.1em] text-text-muted uppercase">
-        Thử kính AR
+        {t("eyebrow")}
       </p>
       <h1
         id="try-on-heading"
         className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
       >
-        {product ? `Thử kính ${product.name}` : "Thử kính AR"}
+        {product ? t("tryProductName", { name: product.name }) : t("title")}
       </h1>
       <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
-        {product
-          ? "Cho phép camera để xem gọng kính này theo dõi khuôn mặt của bạn trực tiếp trên trình duyệt — không có hình ảnh hay video nào được gửi lên máy chủ."
-          : "Cho phép camera, sau đó chọn 1 gọng kính bên dưới để xem gọng kính đó theo dõi khuôn mặt của bạn trực tiếp trên trình duyệt — không có hình ảnh hay video nào được gửi lên máy chủ."}
+        {product ? t("introWithProduct") : t("intro")}
       </p>
 
       <div className="mb-5 rounded-[10px] border border-border bg-surface px-6 py-5">
@@ -154,9 +154,9 @@ export function TryOnPage({ id }: TryOnPageProps) {
               type="button"
               className="btn btn-outline min-w-[160px] flex-1"
               onClick={() => setIsAddToCartOpen(true)}
-              aria-label="Thêm vào giỏ hàng"
+              aria-label={t("addToCart")}
             >
-              Thêm vào giỏ hàng
+              {t("addToCart")}
             </button>
           </div>
         )}
@@ -169,7 +169,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
       {switchableProducts.length > 0 && (
         <div className="mb-5 rounded-[10px] border border-border bg-surface px-6 py-5">
           <p className="mb-3.5 text-[0.8rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
-            {product ? "Thử sản phẩm khác" : "Chọn 1 gọng kính để thử"}
+            {product ? t("switcherTitleWithProduct") : t("switcherTitle")}
           </p>
           {switchError && (
             <p role="status" className="mt-3.5 text-center text-[0.85rem] text-text-secondary">
@@ -186,7 +186,7 @@ export function TryOnPage({ id }: TryOnPageProps) {
                   type="button"
                   className="group flex w-[88px] shrink-0 cursor-pointer flex-col items-center gap-1.5"
                   onClick={() => setActiveId(item.id)}
-                  aria-label={`Thử kính ${item.name}`}
+                  aria-label={t("tryProductName", { name: item.name })}
                 >
                   {itemThumbnail ? (
                     <ImageWithFallback

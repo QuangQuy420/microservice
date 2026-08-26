@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v1/carts")
 
 @router.get("/{user_id}")
 def get_cart(user_id: str, service: CartService = Depends(get_cart_service)):
-    return VNJSONResponse(content=service.get_cart(user_id))
+    return VNJSONResponse(content={"data": service.get_cart(user_id)})
 
 
 @router.post("/{user_id}/items")
@@ -22,7 +22,7 @@ def add_item(
     service: CartService = Depends(get_cart_service),
 ):
     cart = service.add_item(user_id, str(body.productId), str(body.variantId), body.quantity)
-    return VNJSONResponse(content=cart, status_code=201)
+    return VNJSONResponse(content={"data": cart}, status_code=201)
 
 
 @router.put("/{user_id}/items/{variant_id}")
@@ -32,14 +32,16 @@ def update_item(
     body: UpdateCartItemRequest,
     service: CartService = Depends(get_cart_service),
 ):
-    return VNJSONResponse(content=service.update_item(user_id, variant_id, body.quantity))
+    return VNJSONResponse(
+        content={"data": service.update_item(user_id, variant_id, body.quantity)}
+    )
 
 
 @router.delete("/{user_id}/items/{variant_id}")
 def remove_item(
     user_id: str, variant_id: str, service: CartService = Depends(get_cart_service)
 ):
-    return VNJSONResponse(content=service.remove_item(user_id, variant_id))
+    return VNJSONResponse(content={"data": service.remove_item(user_id, variant_id)})
 
 
 @router.delete("/{user_id}")

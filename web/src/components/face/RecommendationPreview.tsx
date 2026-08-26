@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { RecommendationGrid } from "@/components/products/RecommendationGrid";
@@ -20,9 +21,10 @@ interface RecommendationPreviewProps {
 
 // Always fetches as soon as it mounts (or `faceShape` changes) — callers decide WHEN that
 // happens, not this component: mounted immediately for a fresh analysis result (auto-show at the
-// moment of highest intent), or only mounted after a "Xem gợi ý" click for a history item
+// moment of highest intent), or only mounted after a "see suggestions" click for a history item
 // (on-demand, so browsing history doesn't fire one /recommend call per past photo).
 export function RecommendationPreview({ faceShape, onTryOnPhoto }: RecommendationPreviewProps) {
+  const t = useTranslations("face");
   const { items, isLoading, error, recommend } = useRecommendations();
 
   useEffect(() => {
@@ -32,10 +34,10 @@ export function RecommendationPreview({ faceShape, onTryOnPhoto }: Recommendatio
 
   return (
     <div>
-      {isLoading && <LoadingState label="Đang tải gọng kính được gợi ý..." />}
+      {isLoading && <LoadingState label={t("recommend.loading")} />}
       {!isLoading && error && <ErrorState message={error} />}
       {!isLoading && !error && items.length === 0 && (
-        <p className="my-[1em] text-text-muted">Chưa có gọng kính nào phù hợp với dáng mặt này.</p>
+        <p className="my-[1em] text-text-muted">{t("recommend.empty")}</p>
       )}
       {!isLoading && !error && items.length > 0 && (
         <>
@@ -51,7 +53,7 @@ export function RecommendationPreview({ faceShape, onTryOnPhoto }: Recommendatio
             href={`/recommendations?faceShape=${faceShape}`}
             className="mt-4 inline-flex shrink-0 items-center gap-[0.4rem] font-medium text-text hover:text-accent-dark"
           >
-            Xem tất cả gọng kính phù hợp
+            {t("recommend.viewAll")}
             <svg
               width="16"
               height="16"

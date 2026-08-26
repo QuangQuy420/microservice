@@ -161,7 +161,7 @@ describe('ProductsService', () => {
   function baseQuery(overrides: Partial<ListProductsQueryDto> = {}) {
     const dto = new ListProductsQueryDto();
     dto.page = 1;
-    dto.limit = 20;
+    dto.pageSize = 20;
     return Object.assign(dto, overrides);
   }
 
@@ -177,12 +177,11 @@ describe('ProductsService', () => {
 
       const result = await service.findAll(baseQuery());
 
-      expect(result.total).toBe(1);
+      expect(result.meta).toEqual({ page: 1, pageSize: 20, total: 1 });
       expect(result.items).toHaveLength(1);
       expect(result.items[0].variants).toHaveLength(1);
       expect(result.items[0].images).toHaveLength(1);
       expect(result.items[0].brand.name).toBe('Test Brand');
-      expect(result.totalPages).toBe(1);
     });
 
     it('passes filter fields straight through to the repository', async () => {
@@ -198,7 +197,7 @@ describe('ProductsService', () => {
         maxPrice: 200,
         search: 'wayfarer',
         page: 2,
-        limit: 5,
+        pageSize: 5,
       });
 
       await service.findAll(query);
@@ -214,7 +213,7 @@ describe('ProductsService', () => {
         maxPrice: 200,
         search: 'wayfarer',
         page: 2,
-        limit: 5,
+        pageSize: 5,
       });
     });
 
@@ -224,13 +223,12 @@ describe('ProductsService', () => {
       const result = await service.findAll(baseQuery());
 
       expect(result.items).toEqual([]);
-      expect(result.total).toBe(0);
-      expect(result.totalPages).toBe(0);
+      expect(result.meta).toEqual({ page: 1, pageSize: 20, total: 0 });
       expect(variantRepository.findByProductIds).not.toHaveBeenCalled();
       expect(imageRepository.findByProductIds).not.toHaveBeenCalled();
     });
 
-    it('computes totalPages at the pagination boundary (exact multiple)', async () => {
+    it('reports the requested page/pageSize alongside the full total', async () => {
       productRepository.findAndCount.mockResolvedValue({
         items: [makeProduct()],
         total: 40,
@@ -238,9 +236,11 @@ describe('ProductsService', () => {
       variantRepository.findByProductIds.mockResolvedValue([]);
       imageRepository.findByProductIds.mockResolvedValue([]);
 
-      const result = await service.findAll(baseQuery({ limit: 20 }));
+      const result = await service.findAll(
+        baseQuery({ page: 2, pageSize: 20 }),
+      );
 
-      expect(result.totalPages).toBe(2);
+      expect(result.meta).toEqual({ page: 2, pageSize: 20, total: 40 });
     });
 
     it('only attaches variants/images belonging to each specific product', async () => {

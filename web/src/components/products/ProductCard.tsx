@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { AddToCartModal } from "@/components/cart/AddToCartModal";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { formatPriceVnd } from "@/lib/format/price";
-import { formatFrameShapeVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import type { Product } from "@/types/product";
 
 // The card image doubles as its own "no image / broken image" placeholder — same flat grey box
@@ -15,6 +16,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const t = useTranslations("products");
+  const labels = useLabels();
   const thumbnail = product.images.find((image) => image.isThumbnail) ?? product.images[0];
   const [isAddToCartOpen, setIsAddToCartOpen] = useState(false);
 
@@ -33,7 +36,7 @@ export function ProductCard({ product }: ProductCardProps) {
         )}
         <div className="px-4 pt-4">
           <h3 className="mb-1 font-heading text-[1.05rem] font-semibold text-text">{product.name}</h3>
-          <p className="mb-[0.6rem] text-[0.85rem] text-text-muted">{formatFrameShapeVi(product.frameShape)}</p>
+          <p className="mb-[0.6rem] text-[0.85rem] text-text-muted">{labels.frameShape(product.frameShape)}</p>
           <p className="text-base font-semibold">{formatPriceVnd(product.basePrice)}</p>
         </div>
       </Link>
@@ -41,17 +44,17 @@ export function ProductCard({ product }: ProductCardProps) {
         <Link
           href={`/products/${product.id}/try-on`}
           className="btn btn-primary btn-small"
-          aria-label="Thử kính AR"
+          aria-label={t("tryOnAr")}
         >
-          Thử kính AR
+          {t("tryOnAr")}
         </Link>
         <button
           type="button"
           className="btn btn-outline btn-small"
           onClick={() => setIsAddToCartOpen(true)}
-          aria-label="Thêm vào giỏ hàng"
+          aria-label={t("addToCart")}
         >
-          Thêm vào giỏ hàng
+          {t("addToCart")}
         </button>
       </div>
 

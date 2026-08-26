@@ -6,18 +6,34 @@ info:
     Code-first contract (see infra/docs/adr/0001-contract-sharing-mechanism.md and the
     Sprint 1 plan's Q7): written from the real NestJS implementation in
     `product-service/src`, not the other way around. Documents GET/POST/PATCH/DELETE
-    /products, POST /products/:id/images, GET /categories, GET /brands, GET /health
+    /products, POST /products/:id/images, full CRUD for /categories and /brands, and GET /health
     (admin product management pass, see .planning/2026-07-11-admin-product-management.md).
     Face shapes are stored as a product enum array; variant stock is stored on the variant.
-  version: "0.2.0"
+
+
+    **Response envelope (all services share it, see
+    .planning/2026-08-26-i18n-language-switch.md).** Every success body is
+    `{"data": ...}`; a paginated list adds a `meta` sibling
+    `{"page": 1-based, "pageSize", "total"}`; a 204 has no body. Every failure is
+    `{"error": {"code", "message", "details"?}}` where `code` is the stable
+    machine-readable contract, `message` is English developer-facing fallback text, and
+    `details` (validation only) is always `{"<field>": ["<msg>", ...]}`. `GET /health`
+    is the single exception and stays raw. Field validation answers **422**
+    `VALIDATION_ERROR`; **400** is reserved for broken requests (unparseable body,
+    malformed path UUID) with code `MALFORMED_REQUEST`.
+  version: "0.3.0"
+  x-vendored-from: >
+    Verbatim copy of infra/contracts/product-service.openapi.yaml — kept next to
+    recommendation-service so its product-client has the contract at hand. Re-copy the
+    canonical file whenever product-service's contract changes; do not edit this copy.
 servers:
   - url: http://localhost:3002
     description: product-service, direct (local dev only)
   - url: http://localhost:8080/api
     description: via api-gateway (same shapes, `/api` prefix — see api-gateway proxy)
 
-# No auth on any endpoint today — edge JWT verification is deferred (see the Sprint 1
-# plan's Q3); these routes are proxied/served unauthenticated for now.
+# Read endpoints are public. Brand/category write endpoints require `catalog:manage`
+# when requested through api-gateway; product-service trusts that edge enforcement.
 security: []
 
 tags:
@@ -35,7 +51,7 @@ paths:
       operationId: getHealth
       responses:
         "200":
-          description: Service is up
+          description: Service is up. Raw body — deliberately **not** enveloped (ops probe).
           content:
             application/json:
               schema:
@@ -114,8 +130,9 @@ paths:
             type: integer
             minimum: 1
             default: 1
-        - name: limit
+        - name: pageSize
           in: query
+          description: Renamed from `limit` when pagination was unified across services.
           schema:
             type: integer
             minimum: 1
@@ -128,8 +145,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaginatedProductResponse"
-        "400":
-          description: Invalid query parameters (validation failure)
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
     post:
       tags: [products]
@@ -152,11 +169,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
-        "400":
+                $ref: "#/components/schemas/ProductEnvelope"
+        "422":
           description: >
-            Validation failure, or `categoryId`/`brandId` does not reference an
-            existing row.
+            Validation failure (`VALIDATION_ERROR` + `details`), or `categoryId`/`brandId`
+            does not reference an existing row (`CATEGORY_NOT_FOUND` / `BRAND_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}:
     get:
@@ -176,9 +197,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
+                $ref: "#/components/schemas/ProductEnvelope"
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     patch:
       tags: [products]
@@ -206,13 +233,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
+                $ref: "#/components/schemas/ProductEnvelope"
         "400":
-          description: >
-            Validation failure, or `categoryId`/`brandId` does not reference an
-            existing row.
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Validation failure (`VALIDATION_ERROR` + `details`), or `categoryId`/`brandId`
+            does not reference an existing row (`CATEGORY_NOT_FOUND` / `BRAND_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       tags: [products]
@@ -230,9 +267,15 @@ paths:
             format: uuid
       responses:
         "204":
-          description: Product soft-deleted
+          description: Product soft-deleted — no body (nothing useful to return)
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}/images:
     post:
@@ -276,14 +319,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductImageResponse"
+                $ref: "#/components/schemas/ProductImageEnvelope"
         "400":
-          description: >
-            Missing file, disallowed content type, file over 5 MB, `variantId` not
-            belonging to this product, or the group's image count limit (8 for the
-            product, 5 for a variant) already reached.
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Missing file (`FILE_REQUIRED`), disallowed content type
+            (`FILE_TYPE_INVALID`), file over 5 MB (`FILE_TOO_LARGE`), unknown
+            `variantId` (`VARIANT_NOT_FOUND`), `variantId` not belonging to this product
+            (`VARIANT_PRODUCT_MISMATCH`), or the group's image count limit (8 for the
+            product, 5 for a variant) already reached (`IMAGE_LIMIT_REACHED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}/images/{imageId}:
     patch:
@@ -323,11 +378,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductImageResponse"
+                $ref: "#/components/schemas/ProductImageEnvelope"
         "400":
-          description: "`isThumbnail` was not `true`."
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Image not found, or it doesn't belong to this product.
+          description: Image not found, or it doesn't belong to this product (`IMAGE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: "`isThumbnail` was not `true` (`THUMBNAIL_FLAG_REQUIRED`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags: [products]
       summary: Delete a product or variant image (admin)
@@ -347,9 +412,15 @@ paths:
             format: uuid
       responses:
         "204":
-          description: Image deleted
+          description: Image deleted — no body
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Image not found, or it doesn't belong to this product.
+          description: Image not found, or it doesn't belong to this product (`IMAGE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /categories:
     get:
@@ -358,13 +429,109 @@ paths:
       operationId: listCategories
       responses:
         "200":
-          description: Flat list of categories (self-referential via parentId)
+          description: >
+            Public flat list of one-level categories. Unpaginated — `data` is a plain array
+            and there is no `meta` sibling.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CategoryResponse"
+                $ref: "#/components/schemas/CategoryListEnvelope"
+
+    post:
+      tags: [categories]
+      summary: Create a category (catalog manager)
+      description: >
+        Through api-gateway, requires a bearer token with `catalog:manage`.
+        The server creates a unique slug from the name.
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryEnvelope"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  /categories/{id}:
+    get:
+      tags: [categories]
+      summary: Get a category by id
+      operationId: getCategoryById
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Category found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    patch:
+      tags: [categories]
+      summary: Update a category (catalog manager)
+      description: >
+        Through api-gateway, requires a bearer token with `catalog:manage`. Changing
+        the name regenerates the unique slug.
+      operationId: updateCategory
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+      responses:
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryEnvelope"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    delete:
+      tags: [categories]
+      summary: Delete a category (catalog manager)
+      description: >
+        Through api-gateway, requires a bearer token with `catalog:manage`. A category
+        referenced by a product cannot be deleted until its products are moved or deleted.
+      operationId: deleteCategory
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "204":
+          description: Category deleted — no body
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/CategoryInUseError"
 
   /brands:
     get:
@@ -373,16 +540,206 @@ paths:
       operationId: listBrands
       responses:
         "200":
-          description: Flat list of brands
+          description: >
+            Public flat list of brands. Unpaginated — `data` is a plain array and there is
+            no `meta` sibling.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/BrandResponse"
+                $ref: "#/components/schemas/BrandListEnvelope"
+
+    post:
+      tags: [brands]
+      summary: Create a brand (catalog manager)
+      description: >
+        Through api-gateway, requires a bearer token with `catalog:manage`. Brand names
+        are unique after trimming whitespace and case normalization.
+      operationId: createBrand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBrandRequest"
+      responses:
+        "201":
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandEnvelope"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "409":
+          $ref: "#/components/responses/BrandNameConflictError"
+
+  /brands/{id}:
+    get:
+      tags: [brands]
+      summary: Get a brand by id
+      operationId: getBrandById
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Brand found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    patch:
+      tags: [brands]
+      summary: Update a brand (catalog manager)
+      description: Through api-gateway, requires a bearer token with `catalog:manage`.
+      operationId: updateBrand
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBrandRequest"
+      responses:
+        "200":
+          description: Brand updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandEnvelope"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/BrandNameConflictError"
+
+    delete:
+      tags: [brands]
+      summary: Delete a brand (catalog manager)
+      description: >
+        Through api-gateway, requires a bearer token with `catalog:manage`. A brand
+        referenced by a product cannot be deleted until its products are moved or deleted.
+      operationId: deleteBrand
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "204":
+          description: Brand deleted — no body
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/BrandInUseError"
 
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      description: >
+        The shared error envelope. `code` is the stable machine-readable contract (clients
+        translate by it); `message` is English developer-facing fallback text; `details` is
+        present only on 422 validation failures and its values are ALWAYS arrays of strings.
+        See product-service/src/middlewares/http-exception.filter.ts.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: BRAND_IN_USE
+            message:
+              type: string
+              example: Cannot delete this brand because products still use it. Move or delete those products first.
+            details:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+              example:
+                name: ["name should not be empty"]
+          required: [code, message]
+      required: [error]
+
+    ProductEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductResponse"
+      required: [data]
+
+    ProductImageEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductImageResponse"
+      required: [data]
+
+    CategoryEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/CategoryResponse"
+      required: [data]
+
+    CategoryListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryResponse"
+      required: [data]
+
+    BrandEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/BrandResponse"
+      required: [data]
+
+    BrandListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BrandResponse"
+      required: [data]
+
+    PaginationMeta:
+      type: object
+      description: >
+        `meta` sibling of a paginated list envelope — identical across every service.
+        `page` is 1-based; there is no `totalPages` (the client derives it).
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 128
+      required: [page, pageSize, total]
+
     FrameShape:
       type: string
       enum: [ROUND, SQUARE, OVAL, CAT_EYE, AVIATOR, RECTANGLE, WAYFARER, RIMLESS]
@@ -416,6 +773,7 @@ components:
 
     BrandResponse:
       type: object
+      description: Public and management representation of a brand.
       properties:
         id:
           type: string
@@ -425,7 +783,44 @@ components:
         logoUrl:
           type: string
           nullable: true
-      required: [id, name, logoUrl]
+        description:
+          type: string
+          nullable: true
+      required: [id, name, logoUrl, description]
+
+    CreateBrandRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        logoUrl:
+          type: string
+          format: uri
+          maxLength: 512
+          nullable: true
+        description:
+          type: string
+          nullable: true
+      required: [name]
+
+    UpdateBrandRequest:
+      type: object
+      description: Partial update — every field from CreateBrandRequest is optional.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        logoUrl:
+          type: string
+          format: uri
+          maxLength: 512
+          nullable: true
+        description:
+          type: string
+          nullable: true
 
     CategorySummary:
       type: object
@@ -441,6 +836,7 @@ components:
 
     CategoryResponse:
       type: object
+      description: Public and management representation of a one-level category.
       properties:
         id:
           type: string
@@ -449,11 +845,25 @@ components:
           type: string
         slug:
           type: string
-        parentId:
+      required: [id, name, slug]
+
+    CreateCategoryRequest:
+      type: object
+      properties:
+        name:
           type: string
-          format: uuid
-          nullable: true
-      required: [id, name, slug, parentId]
+          minLength: 1
+          maxLength: 255
+      required: [name]
+
+    UpdateCategoryRequest:
+      type: object
+      description: Partial update — the server regenerates slug when name changes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
 
     ProductVariantResponse:
       type: object
@@ -658,19 +1068,85 @@ components:
     PaginatedProductResponse:
       type: object
       description: >
-        Flat pagination envelope (NOT a nested data/meta shape) — see
-        product-service/src/routes/dto/paginated-response.dto.ts.
+        The shared list envelope: `data` holds the page's items, `meta` the paging figures.
+        Built from `PaginatedResponseDto` and flattened by
+        product-service/src/middlewares/transform.interceptor.ts.
       properties:
-        items:
+        data:
           type: array
           items:
             $ref: "#/components/schemas/ProductResponse"
-        total:
-          type: integer
-        page:
-          type: integer
-        limit:
-          type: integer
-        totalPages:
-          type: integer
-      required: [items, total, page, limit, totalPages]
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required: [data, meta]
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    MalformedRequestError:
+      description: >
+        Broken request — a path parameter that is not a UUID (`ParseUUIDPipe`) or an
+        unparseable JSON body. Code `MALFORMED_REQUEST`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: >
+        Well-formed request that fails a field rule. Code `VALIDATION_ERROR`, with
+        `details` = `{"<field>": ["<message>", ...]}`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnauthorizedError:
+      description: >
+        Authentication required. Raised by api-gateway, not by product-service —
+        codes `MISSING_TOKEN` / `INVALID_TOKEN`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ForbiddenError:
+      description: >
+        Authenticated but missing the `catalog:manage` permission. Raised by
+        api-gateway — code `FORBIDDEN`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFoundError:
+      description: >
+        Brand or category not found — code `BRAND_NOT_FOUND` or `CATEGORY_NOT_FOUND`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BrandNameConflictError:
+      description: Brand name already taken — code `BRAND_NAME_TAKEN`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BrandInUseError:
+      description: >
+        The brand still has products; move or delete them first — code `BRAND_IN_USE`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    CategoryInUseError:
+      description: >
+        The category still has products; move or delete them first — code
+        `CATEGORY_IN_USE`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

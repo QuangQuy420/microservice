@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -19,42 +20,31 @@ class TestEnvelopeShape:
     def test_404_envelope(self, client):
         res = client.get(f"/api/v1/users/{USER}/orders/{uuid.uuid4()}")
         body = res.json()
-        assert set(body.keys()) == {
-            "timestamp",
-            "status",
-            "error",
-            "message",
-            "path",
-            "validationErrors",
-        }
-        assert body["status"] == 404
-        assert body["error"] == "Not Found"
-        assert body["message"] == "Không tìm thấy đơn hàng"
-        assert body["path"] == f"/api/v1/users/{USER}/orders/{body['path'].rsplit('/', 1)[-1]}"
-        assert body["validationErrors"] is None
-        # timestamp is a naive local ISO string (no timezone offset)
-        assert "T" in body["timestamp"]
-        assert "+" not in body["timestamp"]
-        assert not body["timestamp"].endswith("Z")
+        assert set(body.keys()) == {"error"}
+        assert set(body["error"].keys()) == {"code", "message"}
+        assert body["error"]["code"] == "ORDER_NOT_FOUND"
+        assert body["error"]["message"] == "Order not found"
 
-    def test_validation_envelope_first_error_per_field(self, client):
+    def test_validation_envelope_all_errors_per_field(self, client):
         res = client.post(
             f"/api/v1/users/{USER}/checkout",
             json={
                 "receiverPhone": "xxx",
-                "shippingAddress": "1 Lê Lợi",
+                "shippingAddress": "1 Le Loi",
                 "paymentMethod": "CARD",
                 "variantIds": [],
             },
         )
-        assert res.status_code == 400
-        body = res.json()
-        assert body["error"] == "Bad Request"
-        assert body["message"] == "Dữ liệu gửi lên không hợp lệ"
-        errors = body["validationErrors"]
-        assert errors["receiverPhone"] == "Số điện thoại không hợp lệ"
-        assert errors["variantIds"] == "Vui lòng chọn ít nhất 1 sản phẩm để thanh toán"
-        assert errors["receiverName"] == "Tên người nhận không được để trống"
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert error["message"] == "Invalid request data"
+        details = error["details"]
+        # details values are ALWAYS arrays of strings
+        assert all(isinstance(v, list) for v in details.values())
+        assert details["receiverPhone"] == ["Phone number is invalid"]
+        assert details["variantIds"] == ["Select at least 1 product to check out"]
+        assert details["receiverName"] == ["Receiver name is required"]
 
     def test_malformed_json_body(self, client):
         res = client.post(
@@ -63,7 +53,15 @@ class TestEnvelopeShape:
             headers={"Content-Type": "application/json"},
         )
         assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
+        error = res.json()["error"]
+        assert error["code"] == "MALFORMED_REQUEST"
+        assert error["message"] == "Request body is not valid JSON"
+        assert "details" not in error
+
+    def test_unknown_route_is_enveloped(self, client):
+        res = client.get("/api/v1/does-not-exist")
+        assert res.status_code == 404
+        assert res.json()["error"]["code"] == "NOT_FOUND"
 
 
 def _product_client_responding(handler) -> ProductClient:
@@ -76,30 +74,56 @@ def _product_client_responding(handler) -> ProductClient:
     )
 
 
+class TestProductClientEnvelope:
+    """product-service wraps successes in {"data": ...} — the client unwraps it."""
+
+    def test_success_body_is_unwrapped(self):
+        pc = _product_client_responding(
+            lambda req: httpx.Response(
+                200, json={"data": {"id": "p1", "basePrice": 100000.50, "variants": []}}
+            )
+        )
+        product = pc.get_product("p1")
+        assert product["id"] == "p1"
+        assert "data" not in product
+        # parse_float=Decimal keeps money exact through the unwrap
+        assert product["basePrice"] == Decimal("100000.50")
+
+    @pytest.mark.parametrize("body", [{}, {"data": None}, []])
+    def test_missing_data_key_maps_to_502(self, body):
+        pc = _product_client_responding(lambda req: httpx.Response(200, json=body))
+        with pytest.raises(BadGatewayError) as exc:
+            pc.get_product("x")
+        assert exc.value.message == "Product Service returned an empty response"
+        assert exc.value.code == "PRODUCT_SERVICE_ERROR"
+
+
 class TestProductClientErrorMapping:
     def test_404_maps_to_not_found_with_id(self):
         pc = _product_client_responding(lambda req: httpx.Response(404))
         with pytest.raises(NotFoundError) as exc:
             pc.get_product("abc-123")
-        assert exc.value.message == "Không tìm thấy sản phẩm: abc-123"
+        assert exc.value.message == "Product not found: abc-123"
+        assert exc.value.code == "PRODUCT_NOT_FOUND"
 
     def test_other_4xx_maps_to_502(self):
         pc = _product_client_responding(lambda req: httpx.Response(403))
         with pytest.raises(BadGatewayError) as exc:
             pc.get_product("x")
-        assert exc.value.message == "Product Service từ chối yêu cầu với mã lỗi 403"
+        assert exc.value.message == "Product Service rejected the request with status 403"
+        assert exc.value.code == "PRODUCT_SERVICE_ERROR"
 
     def test_5xx_maps_to_502(self):
         pc = _product_client_responding(lambda req: httpx.Response(500))
         with pytest.raises(BadGatewayError) as exc:
             pc.get_product("x")
-        assert exc.value.message == "Product Service đang xảy ra lỗi"
+        assert exc.value.message == "Product Service returned an error"
 
     def test_empty_body_maps_to_502(self):
         pc = _product_client_responding(lambda req: httpx.Response(200, content=b""))
         with pytest.raises(BadGatewayError) as exc:
             pc.get_product("x")
-        assert exc.value.message == "Product Service trả về dữ liệu rỗng"
+        assert exc.value.message == "Product Service returned an empty response"
 
     def test_connect_failure_maps_to_502(self):
         def handler(request):
@@ -108,7 +132,8 @@ class TestProductClientErrorMapping:
         pc = _product_client_responding(handler)
         with pytest.raises(BadGatewayError) as exc:
             pc.get_product("x")
-        assert exc.value.message == "Không thể kết nối đến Product Service"
+        assert exc.value.message == "Cannot connect to Product Service"
+        assert exc.value.code == "PRODUCT_SERVICE_UNAVAILABLE"
 
     def test_timeout_maps_to_502(self):
         def handler(request):
@@ -143,10 +168,10 @@ class Test502ThroughApi:
             },
         )
         assert res.status_code == 502
-        body = res.json()
-        assert body["error"] == "Bad Gateway"
-        assert body["message"] == "Không thể kết nối đến Product Service"
-        assert body["validationErrors"] is None
+        error = res.json()["error"]
+        assert error["code"] == "PRODUCT_SERVICE_UNAVAILABLE"
+        assert error["message"] == "Cannot connect to Product Service"
+        assert "details" not in error
 
     def test_unexpected_error_gives_500_envelope(self, app):
         # break the sessionmaker to force an unexpected error
@@ -154,6 +179,6 @@ class Test502ThroughApi:
         client = TestClient(app, raise_server_exceptions=False)
         res = client.get("/api/v1/admin/orders/summary")
         assert res.status_code == 500
-        body = res.json()
-        assert body["error"] == "Internal Server Error"
-        assert body["message"] == "Đã xảy ra lỗi trong hệ thống"
+        error = res.json()["error"]
+        assert error["code"] == "INTERNAL_ERROR"
+        assert error["message"] == "An internal error occurred"

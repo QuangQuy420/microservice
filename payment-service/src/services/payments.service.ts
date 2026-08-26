@@ -60,7 +60,7 @@ export class PaymentsService {
     }
 
     if (paymentMethod !== SUPPORTED_PAYMENT_METHOD) {
-      const reason = `Phương thức thanh toán không được hỗ trợ: ${paymentMethod}`;
+      const reason = `Unsupported payment method: ${paymentMethod}`;
       const payment = await this.paymentRepository.createFailed(
         orderId,
         userId,
@@ -94,7 +94,7 @@ export class PaymentsService {
       return;
     }
 
-    const reason = `Số tiền thanh toán dưới hạn mức tối thiểu (tối thiểu ${this.minCardAmount.toLocaleString('vi-VN')} ₫)`;
+    const reason = `Payment amount is below the minimum (minimum ${this.minCardAmount} VND)`;
     const payment = await this.paymentRepository.createFailed(
       orderId,
       userId,

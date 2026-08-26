@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
-import { ApiError, getAdminOrderDetail, updateOrderStatusAdmin } from "@/lib/api";
+import {
+  apiErrorDetails,
+  getAdminOrderDetail,
+  updateOrderStatusAdmin,
+  useApiError,
+} from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { getColorSwatch } from "@/lib/format/color";
 import { formatPriceVnd } from "@/lib/format/price";
-import { formatOrderStatusVi, ORDER_STATUSES } from "@/lib/labels";
+import { ORDER_STATUSES, useLabels } from "@/lib/labels";
 import type { Order, OrderStatus } from "@/types/order";
 
 interface AdminOrderDetailPageProps {
@@ -26,13 +32,17 @@ const STATUS_CONTROL =
 
 // Admin order detail (T13, AC7/AC8) — items, shipping info, full status history for ANY order
 // (not just the caller's own, unlike OrderDetailPage.tsx which this pattern-matches), plus:
-// - a "Lý do hủy đơn" callout when the order's current status is CANCELLED, sourced from the
+// - a cancellation-reason callout when the order's current status is CANCELLED, sourced from the
 //   most recent CANCELLED status-history entry's `note` (that's where
 //   OrderSagaEventListener.handlePaymentFailed writes the failure reason).
 // - a status-change control. The dropdown intentionally offers every OrderStatus rather than
 //   re-implementing order-service's transition graph client-side (plan Q1) — an invalid choice
-//   is rejected by the backend and its Vietnamese error is shown inline (AC8), not thrown.
+//   is rejected by the backend and its translated error is shown inline (AC8), not thrown.
 export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
+  const t = useTranslations("admin");
+  const labels = useLabels();
+  const translateError = useApiError();
+
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,11 +51,12 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
   const [statusNote, setStatusNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   async function loadOrder() {
     const token = getAccessToken();
     if (!token) {
-      setError("Bạn cần đăng nhập lại để xem đơn hàng.");
+      setError(t("orders.detail.loginRequired"));
       setIsLoading(false);
       return;
     }
@@ -57,7 +68,7 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
       setOrder(result);
       setNextStatus(result.status);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể tải thông tin đơn hàng.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +81,7 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
       const token = getAccessToken();
       if (!token) {
         if (!cancelled) {
-          setError("Bạn cần đăng nhập lại để xem đơn hàng.");
+          setError(t("orders.detail.loginRequired"));
           setIsLoading(false);
         }
         return;
@@ -86,7 +97,7 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải thông tin đơn hàng.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -98,33 +109,33 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t, translateError]);
 
   async function handleStatusSubmit() {
     const token = getAccessToken();
     if (!token) {
-      setStatusError("Bạn cần đăng nhập lại để thực hiện thao tác này.");
+      setStatusError(t("orders.detail.actionLoginRequired"));
       return;
     }
 
     setIsSubmitting(true);
     setStatusError(null);
+    setFieldErrors({});
     try {
       await updateOrderStatusAdmin(token, id, nextStatus, statusNote.trim() || undefined);
       setStatusNote("");
       await loadOrder();
     } catch (err) {
-      setStatusError(
-        err instanceof ApiError ? err.message : "Không thể cập nhật trạng thái đơn hàng.",
-      );
+      setStatusError(translateError(err));
+      setFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (isLoading) return <LoadingState label="Đang tải đơn hàng..." />;
+  if (isLoading) return <LoadingState label={t("orders.detail.loading")} />;
   if (error) return <ErrorState message={error} />;
-  if (!order) return <ErrorState message="Không tìm thấy đơn hàng." />;
+  if (!order) return <ErrorState message={t("orders.detail.notFound")} />;
 
   // The most recent CANCELLED status-history entry — order.status already reflects the latest
   // transition, so "latest entry is CANCELLED" is exactly "order.status === CANCELLED"; among
@@ -148,17 +159,17 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
-        Về danh sách đơn hàng
+        {t("orders.detail.backToList")}
       </Link>
 
       <h1
         id="admin-order-detail-heading"
         className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text"
       >
-        Đơn hàng {order.orderCode}
+        {t("orders.detail.heading", { orderCode: order.orderCode })}
       </h1>
       <p className="-mt-3 mb-6 text-[0.95rem] text-text-secondary">
-        Trạng thái: {formatOrderStatusVi(order.status)}
+        {t("orders.detail.statusLine", { status: labels.orderStatus(order.status) })}
       </p>
 
       {latestCancelEntry?.note && (
@@ -166,21 +177,27 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
           className="mb-6 rounded-[10px] border border-[rgba(169,40,40,0.35)] bg-[rgba(169,40,40,0.06)] px-4 py-3 text-[0.9rem] leading-[1.5] text-[#a92828]"
           role="alert"
         >
-          <strong>Lý do hủy đơn:</strong> {latestCancelEntry.note}
+          <strong>{t("orders.detail.cancelReason")}</strong> {latestCancelEntry.note}
         </div>
       )}
 
-      <section aria-label="Thông tin giao hàng" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Thông tin giao hàng</h2>
-        <p className={SECTION_TEXT}>Người nhận: {order.receiverName}</p>
-        <p className={SECTION_TEXT}>Số điện thoại: {order.receiverPhone}</p>
-        <p className={SECTION_TEXT}>Địa chỉ: {order.shippingAddress}</p>
-        {order.note && <p className={SECTION_TEXT}>Ghi chú: {order.note}</p>}
-        <p className={SECTION_TEXT}>Phương thức thanh toán: {order.paymentMethod}</p>
+      <section aria-label={t("orders.detail.shippingHeading")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("orders.detail.shippingHeading")}</h2>
+        <p className={SECTION_TEXT}>
+          {t("orders.detail.receiver", { name: order.receiverName })}
+        </p>
+        <p className={SECTION_TEXT}>{t("orders.detail.phone", { phone: order.receiverPhone })}</p>
+        <p className={SECTION_TEXT}>
+          {t("orders.detail.address", { address: order.shippingAddress })}
+        </p>
+        {order.note && <p className={SECTION_TEXT}>{t("orders.detail.note", { note: order.note })}</p>}
+        <p className={SECTION_TEXT}>
+          {t("orders.detail.paymentMethod", { method: order.paymentMethod })}
+        </p>
       </section>
 
-      <section aria-label="Sản phẩm trong đơn hàng" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Sản phẩm</h2>
+      <section aria-label={t("orders.detail.itemsSectionLabel")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("orders.detail.itemsHeading")}</h2>
         <ul className="mb-4 flex flex-col gap-[0.65rem]">
           {order.items.map((item) => (
             <li
@@ -204,16 +221,16 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
           ))}
         </ul>
         <p className="pt-1 text-[1.05rem] text-text-secondary">
-          Tổng cộng:{" "}
+          {t("orders.detail.totalLabel")}{" "}
           <strong className="text-[1.2rem] text-text">{formatPriceVnd(order.totalAmount)}</strong>
         </p>
       </section>
 
-      <section aria-label="Cập nhật trạng thái đơn hàng" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Cập nhật trạng thái</h2>
+      <section aria-label={t("orders.detail.statusSectionLabel")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("orders.detail.statusHeading")}</h2>
         <div className="mt-6 flex flex-col items-start gap-3 max-[700px]:w-full">
           <label htmlFor="admin-order-status-select" className={STATUS_LABEL}>
-            Trạng thái mới
+            {t("orders.detail.newStatus")}
             <select
               id="admin-order-status-select"
               className={STATUS_CONTROL}
@@ -222,23 +239,33 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
             >
               {ORDER_STATUSES.map((value) => (
                 <option key={value} value={value}>
-                  {formatOrderStatusVi(value)}
+                  {labels.orderStatus(value)}
                 </option>
               ))}
             </select>
           </label>
+          {fieldErrors.status?.map((msg) => (
+            <p key={msg} role="alert" className="my-[0.25em] text-[#a92828]">
+              {msg}
+            </p>
+          ))}
 
           <label htmlFor="admin-order-status-note" className={STATUS_LABEL}>
-            Ghi chú (tuỳ chọn)
+            {t("orders.detail.noteLabel")}
             <input
               id="admin-order-status-note"
               type="text"
               className={STATUS_CONTROL}
               value={statusNote}
               onChange={(event) => setStatusNote(event.target.value)}
-              placeholder="Ghi chú cho lần đổi trạng thái này"
+              placeholder={t("orders.detail.notePlaceholder")}
             />
           </label>
+          {fieldErrors.note?.map((msg) => (
+            <p key={msg} role="alert" className="my-[0.25em] text-[#a92828]">
+              {msg}
+            </p>
+          ))}
 
           <button
             type="button"
@@ -246,7 +273,7 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
             onClick={handleStatusSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Đang cập nhật..." : "Cập nhật trạng thái"}
+            {isSubmitting ? t("orders.detail.updating") : t("orders.detail.updateStatus")}
           </button>
 
           {statusError && (
@@ -257,15 +284,15 @@ export function AdminOrderDetailPage({ id }: AdminOrderDetailPageProps) {
         </div>
       </section>
 
-      <section aria-label="Lịch sử trạng thái" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Lịch sử trạng thái</h2>
+      <section aria-label={t("orders.detail.historyHeading")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("orders.detail.historyHeading")}</h2>
         <ul className="flex flex-col gap-[0.6rem]">
           {order.statusHistories.map((entry) => (
             <li
               key={entry.id}
               className="rounded-lg bg-[rgba(43,36,32,0.035)] px-3 py-[0.6rem] text-[0.85rem] text-text-secondary"
             >
-              <span>{formatOrderStatusVi(entry.status)}</span>
+              <span>{labels.orderStatus(entry.status)}</span>
               {entry.note && <span> — {entry.note}</span>}
               <span> ({new Date(entry.changedAt).toLocaleString("vi-VN")})</span>
             </li>

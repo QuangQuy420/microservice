@@ -46,8 +46,9 @@ def list_day_orders(session: Session, date_str: str) -> list[dict]:
         target = date.fromisoformat(date_str)
     except ValueError:
         raise BadRequestError(
-            messages.VALIDATION_FAILED,
-            validation_errors={"date": "Ngày không hợp lệ (định dạng yyyy-MM-dd)"},
+            messages.MALFORMED_REQUEST,
+            code="MALFORMED_REQUEST",
+            details={"date": ["Invalid date (expected format yyyy-MM-dd)"]},
         )
     day = func.date(OrderSagaLog.occurred_at)
     rows = session.execute(

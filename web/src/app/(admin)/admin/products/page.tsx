@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ApiError, deleteProduct } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { deleteProduct, useApiError } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { LoadingState } from "@/components/common/LoadingState";
 import { useProducts } from "@/hooks/useProducts";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
-import { formatFrameShapeVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import { formatPriceVnd } from "@/lib/format/price";
 
 const ROW =
@@ -25,6 +26,9 @@ const ICON_BTN =
 // Admin product list (T17, AC1/AC4) — matches Admin Products.dc.html: stat cards (no AR stat,
 // intentionally dropped, see plan Summary), search-by-name, and a table with edit/delete actions.
 export default function AdminProductsPage() {
+  const t = useTranslations("admin");
+  const labels = useLabels();
+  const translateError = useApiError();
   const [searchInput, setSearchInput] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -42,18 +46,18 @@ export default function AdminProductsPage() {
     const onSale = products.filter((p) => p.status === "PUBLISHED").length;
     const outOfStock = total - onSale;
     return [
-      { label: "Tổng sản phẩm", value: total },
-      { label: "Đang bán", value: onSale },
-      { label: "Hết hàng", value: outOfStock },
+      { key: "total", label: t("products.statTotal"), value: total },
+      { key: "onSale", label: t("products.statOnSale"), value: onSale },
+      { key: "outOfStock", label: t("products.statOutOfStock"), value: outOfStock },
     ];
-  }, [products]);
+  }, [products, t]);
 
   async function handleDelete(id: string, name: string) {
-    if (!window.confirm(`Xoá sản phẩm "${name}"? Hành động này không thể hoàn tác.`)) return;
+    if (!window.confirm(t("products.confirmDelete", { name }))) return;
 
     const token = getAccessToken();
     if (!token) {
-      setDeleteError("Vui lòng đăng nhập lại.");
+      setDeleteError(t("products.sessionExpired"));
       return;
     }
 
@@ -63,7 +67,7 @@ export default function AdminProductsPage() {
       await deleteProduct(id, token);
       await refetch();
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Xoá sản phẩm thất bại.");
+      setDeleteError(translateError(err));
     } finally {
       setDeletingId(null);
     }
@@ -72,7 +76,7 @@ export default function AdminProductsPage() {
   return (
     <>
       <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
-        <div className="font-heading text-[1.35rem] font-semibold">Quản lý sản phẩm</div>
+        <div className="font-heading text-[1.35rem] font-semibold">{t("products.title")}</div>
         <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
           AD
         </div>
@@ -81,7 +85,7 @@ export default function AdminProductsPage() {
       <section className="p-7">
         <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3.5">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-lg border border-border bg-surface px-[1.1rem] py-4">
+            <div key={stat.key} className="rounded-lg border border-border bg-surface px-[1.1rem] py-4">
               <div className="mb-1.5 text-[0.78rem] text-text-muted">{stat.label}</div>
               <div className="font-heading text-[1.35rem] font-semibold">{stat.value}</div>
             </div>
@@ -106,29 +110,29 @@ export default function AdminProductsPage() {
             <input
               type="search"
               className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
-              aria-label="Tìm sản phẩm"
-              placeholder="Tìm sản phẩm…"
+              aria-label={t("products.searchLabel")}
+              placeholder={t("products.searchPlaceholder")}
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
           </div>
           <Link href="/admin/products/new" className="btn btn-primary">
-            + Thêm sản phẩm
+            + {t("products.add")}
           </Link>
         </div>
 
         {deleteError && <ErrorState message={deleteError} />}
 
-        {isLoading && <LoadingState label="Đang tải sản phẩm..." />}
+        {isLoading && <LoadingState label={t("products.loading")} />}
         {!isLoading && error && <ErrorState message={error} />}
         {!isLoading && !error && (
           <div className="overflow-hidden rounded-lg border border-border bg-surface">
             <div className={cn(ROW, ROW_HEAD)}>
               <span></span>
-              <span>Sản phẩm</span>
-              <span>Kiểu dáng</span>
-              <span>Giá</span>
-              <span>Trạng thái</span>
+              <span>{t("products.columnProduct")}</span>
+              <span>{t("products.columnShape")}</span>
+              <span>{t("products.columnPrice")}</span>
+              <span>{t("products.columnStatus")}</span>
               <span></span>
             </div>
             {filteredProducts.map((product) => {
@@ -150,7 +154,7 @@ export default function AdminProductsPage() {
                     <div className="font-semibold">{product.name}</div>
                     <div className="text-xs text-text-muted">{product.brand.name}</div>
                   </div>
-                  <span className="text-text-secondary">{formatFrameShapeVi(product.frameShape)}</span>
+                  <span className="text-text-secondary">{labels.frameShape(product.frameShape)}</span>
                   <span className="font-medium">{formatPriceVnd(product.basePrice)}</span>
                   <span
                     className={cn(
@@ -160,13 +164,13 @@ export default function AdminProductsPage() {
                         : "bg-[rgba(138,122,99,0.14)] text-text-muted",
                     )}
                   >
-                    {isOnSale ? "Đang bán" : "Hết hàng"}
+                    {isOnSale ? t("products.statusOnSale") : t("products.statusOutOfStock")}
                   </span>
                   <div className="flex justify-end gap-2">
                     <Link
                       href={`/admin/products/${product.id}/edit`}
                       className={cn(ICON_BTN, "text-text")}
-                      aria-label={`Sửa ${product.name}`}
+                      aria-label={t("products.editAria", { name: product.name })}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M12 20h9" />
@@ -176,7 +180,7 @@ export default function AdminProductsPage() {
                     <button
                       type="button"
                       className={cn(ICON_BTN, "text-[#b4483a]")}
-                      aria-label={`Xoá ${product.name}`}
+                      aria-label={t("products.deleteAria", { name: product.name })}
                       disabled={deletingId === product.id}
                       onClick={() => handleDelete(product.id, product.name)}
                     >
@@ -191,7 +195,7 @@ export default function AdminProductsPage() {
             })}
             {filteredProducts.length === 0 && (
               <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
-                Không tìm thấy sản phẩm nào khớp với &quot;{searchInput}&quot;.
+                {t("products.empty", { term: searchInput })}
               </div>
             )}
           </div>

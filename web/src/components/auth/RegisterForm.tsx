@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { register } from "@/lib/api";
 import { useAuthForm } from "@/hooks/useAuthForm";
 
@@ -24,6 +25,7 @@ const SUBMIT_CLASS =
     "enabled:hover:shadow-[0_10px_22px_rgba(43,36,32,0.14)] " +
     "disabled:cursor-not-allowed disabled:opacity-[0.58] motion-reduce:transition-none";
 
+// Field errors hold message keys, not text, so the rendered copy follows the active locale.
 interface FieldErrors {
     username?: string;
     fullName?: string;
@@ -42,27 +44,27 @@ function validate(
     const errors: FieldErrors = {};
 
     if (!username.trim()) {
-        errors.username = "Tên đăng nhập là bắt buộc.";
+        errors.username = "register.errors.usernameRequired";
     }
 
     if (!fullName.trim()) {
-        errors.fullName = "Họ và tên là bắt buộc.";
+        errors.fullName = "register.errors.fullNameRequired";
     }
 
     if (!email.trim()) {
-        errors.email = "Email là bắt buộc.";
+        errors.email = "register.errors.emailRequired";
     } else if (!EMAIL_PATTERN.test(email)) {
-        errors.email = "Email không hợp lệ.";
+        errors.email = "register.errors.emailInvalid";
     }
 
     if (!password) {
-        errors.password = "Mật khẩu là bắt buộc.";
+        errors.password = "register.errors.passwordRequired";
     } else if (password.length < 8) {
-        errors.password = "Mật khẩu phải có ít nhất 8 ký tự.";
+        errors.password = "register.errors.passwordTooShort";
     }
 
     if (confirmPassword !== password) {
-        errors.confirmPassword = "Mật khẩu xác nhận không khớp.";
+        errors.confirmPassword = "register.errors.confirmPasswordMismatch";
     }
 
     return errors;
@@ -70,6 +72,7 @@ function validate(
 
 export function RegisterForm() {
     const router = useRouter();
+    const t = useTranslations("auth");
 
     const [username, setUsername] = useState("");
     const [fullName, setFullName] = useState("");
@@ -85,6 +88,7 @@ export function RegisterForm() {
     const {
         isSubmitting,
         error,
+        details,
         success,
         submit,
     } = useAuthForm(register);
@@ -132,7 +136,7 @@ export function RegisterForm() {
             noValidate
         >
             <label htmlFor="register-username" className={LABEL_CLASS}>
-                Tên đăng nhập
+                {t("register.usernameLabel")}
                 <input
                     id="register-username"
                     className={INPUT_CLASS}
@@ -146,13 +150,20 @@ export function RegisterForm() {
 
                 {fieldErrors.username && (
                     <span className="field-error">
-            {fieldErrors.username}
+            {t(fieldErrors.username)}
           </span>
                 )}
+
+                {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+                {details.username?.map((msg) => (
+                    <span key={msg} className="field-error">
+            {msg}
+          </span>
+                ))}
             </label>
 
             <label htmlFor="register-full-name" className={LABEL_CLASS}>
-                Họ và tên
+                {t("register.fullNameLabel")}
                 <input
                     id="register-full-name"
                     className={INPUT_CLASS}
@@ -166,13 +177,19 @@ export function RegisterForm() {
 
                 {fieldErrors.fullName && (
                     <span className="field-error">
-            {fieldErrors.fullName}
+            {t(fieldErrors.fullName)}
           </span>
                 )}
+
+                {details.fullName?.map((msg) => (
+                    <span key={msg} className="field-error">
+            {msg}
+          </span>
+                ))}
             </label>
 
             <label htmlFor="register-email" className={LABEL_CLASS}>
-                Email
+                {t("register.emailLabel")}
                 <input
                     id="register-email"
                     className={INPUT_CLASS}
@@ -186,13 +203,19 @@ export function RegisterForm() {
 
                 {fieldErrors.email && (
                     <span className="field-error">
-            {fieldErrors.email}
+            {t(fieldErrors.email)}
           </span>
                 )}
+
+                {details.email?.map((msg) => (
+                    <span key={msg} className="field-error">
+            {msg}
+          </span>
+                ))}
             </label>
 
             <label htmlFor="register-phone" className={LABEL_CLASS}>
-                Số điện thoại
+                {t("register.phoneLabel")}
                 <input
                     id="register-phone"
                     className={INPUT_CLASS}
@@ -203,10 +226,16 @@ export function RegisterForm() {
                     }
                     autoComplete="tel"
                 />
+
+                {details.phone?.map((msg) => (
+                    <span key={msg} className="field-error">
+            {msg}
+          </span>
+                ))}
             </label>
 
             <label htmlFor="register-password" className={LABEL_CLASS}>
-                Mật khẩu
+                {t("register.passwordLabel")}
                 <input
                     id="register-password"
                     className={INPUT_CLASS}
@@ -220,13 +249,19 @@ export function RegisterForm() {
 
                 {fieldErrors.password && (
                     <span className="field-error">
-            {fieldErrors.password}
+            {t(fieldErrors.password)}
           </span>
                 )}
+
+                {details.password?.map((msg) => (
+                    <span key={msg} className="field-error">
+            {msg}
+          </span>
+                ))}
             </label>
 
             <label htmlFor="register-confirm-password" className={LABEL_CLASS}>
-                Xác nhận mật khẩu
+                {t("register.confirmPasswordLabel")}
                 <input
                     id="register-confirm-password"
                     className={INPUT_CLASS}
@@ -240,15 +275,15 @@ export function RegisterForm() {
 
                 {fieldErrors.confirmPassword && (
                     <span className="field-error">
-            {fieldErrors.confirmPassword}
+            {t(fieldErrors.confirmPassword)}
           </span>
                 )}
             </label>
 
             <button type="submit" className={SUBMIT_CLASS} disabled={isSubmitting}>
                 {isSubmitting
-                    ? "Đang tạo tài khoản..."
-                    : "Đăng ký"}
+                    ? t("register.submitting")
+                    : t("register.submit")}
             </button>
 
             {error && (
@@ -259,7 +294,7 @@ export function RegisterForm() {
 
             {success && (
                 <p role="status" className="text-[0.84rem] text-[#3d6654]">
-                    Đăng ký thành công. Đang chuyển sang đăng nhập...
+                    {t("register.success")}
                 </p>
             )}
         </form>

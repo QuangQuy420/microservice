@@ -1,9 +1,9 @@
 import {
-  BadRequestException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { IProductVariantRepository } from '../repositories/product-variant.repository';
 import { IProductImageRepository } from '../repositories/product-image.repository';
@@ -81,11 +81,13 @@ export class ProductImagesService {
     const maxCount =
       variantId === null ? MAX_PRODUCT_IMAGES : MAX_VARIANT_IMAGES;
     if (groupImages.length >= maxCount) {
-      throw new BadRequestException(
-        variantId === null
-          ? `Sản phẩm đã đạt giới hạn tối đa ${maxCount} ảnh`
-          : `Phiên bản đã đạt giới hạn tối đa ${maxCount} ảnh`,
-      );
+      throw new UnprocessableEntityException({
+        code: 'IMAGE_LIMIT_REACHED',
+        message:
+          variantId === null
+            ? `Product has reached the maximum of ${maxCount} images`
+            : `Variant has reached the maximum of ${maxCount} images`,
+      });
     }
 
     const sortOrder =
@@ -159,9 +161,10 @@ export class ProductImagesService {
   ): Promise<ProductImage> {
     const image = await this.imageRepository.findById(imageId);
     if (!image || image.productId !== productId) {
-      throw new NotFoundException(
-        `Không tìm thấy ảnh ${imageId} của sản phẩm ${productId}`,
-      );
+      throw new NotFoundException({
+        code: 'IMAGE_NOT_FOUND',
+        message: `Image ${imageId} not found for product ${productId}`,
+      });
     }
     return image;
   }
@@ -180,8 +183,9 @@ export class ProductImagesService {
   }
 
   /**
-   * Throws `BadRequestException` when `variantId` doesn't exist or belongs to a
-   * different product than `productId`.
+   * Throws `UnprocessableEntityException` (422) when `variantId` doesn't exist or belongs to
+   * a different product than `productId` — the request is well-formed, the value it carries
+   * just isn't usable (decision 7).
    */
   async assertVariantBelongsToProduct(
     productId: string,
@@ -189,14 +193,16 @@ export class ProductImagesService {
   ): Promise<void> {
     const variant = await this.variantRepository.findById(variantId);
     if (!variant) {
-      throw new BadRequestException(
-        `ProductImage.variantId ${variantId} không tồn tại`,
-      );
+      throw new UnprocessableEntityException({
+        code: 'VARIANT_NOT_FOUND',
+        message: `ProductImage.variantId ${variantId} does not exist`,
+      });
     }
     if (variant.productId !== productId) {
-      throw new BadRequestException(
-        `ProductImage.variantId ${variantId} thuộc về sản phẩm ${variant.productId}, không phải ${productId}`,
-      );
+      throw new UnprocessableEntityException({
+        code: 'VARIANT_PRODUCT_MISMATCH',
+        message: `ProductImage.variantId ${variantId} belongs to product ${variant.productId}, not ${productId}`,
+      });
     }
   }
 }

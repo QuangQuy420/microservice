@@ -50,7 +50,13 @@ def test_list_products_parses_a_successful_response(monkeypatch: pytest.MonkeyPa
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured_request["url"] = request.url
-        return httpx.Response(200, json={"items": [_PRODUCT_ITEM]})
+        return httpx.Response(
+            200,
+            json={
+                "data": [_PRODUCT_ITEM],
+                "meta": {"page": 1, "pageSize": 5, "total": 1},
+            },
+        )
 
     _install_mock_transport(monkeypatch, httpx.MockTransport(handler))
     client = HttpxProductServiceClient(_SETTINGS)
@@ -62,7 +68,8 @@ def test_list_products_parses_a_successful_response(monkeypatch: pytest.MonkeyPa
     assert products[0].score == 0.0
     params = captured_request["url"].params
     assert params["faceShape"] == "ROUND"
-    assert params["limit"] == "5"
+    assert params["pageSize"] == "5"
+    assert "limit" not in params  # product-service renamed the page-size param
     assert "frameShape" not in params  # not passed -> omitted, not sent as "None"
 
 
@@ -81,7 +88,9 @@ def test_list_products_raises_unavailable_error_on_5xx_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"message": "internal error"})
+        return httpx.Response(
+            500, json={"error": {"code": "INTERNAL_ERROR", "message": "Internal server error"}}
+        )
 
     _install_mock_transport(monkeypatch, httpx.MockTransport(handler))
     client = HttpxProductServiceClient(_SETTINGS)

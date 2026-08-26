@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { changePassword } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { apiErrorDetails, changePassword, useApiError } from "@/lib/api";
 import {
     getAccessToken,
     removeAccessToken,
@@ -22,6 +23,8 @@ const SUBMIT_CLASS =
 
 export default function ChangePasswordPage() {
     const router = useRouter();
+    const t = useTranslations("auth");
+    const translateError = useApiError();
 
     const [currentPassword, setCurrentPassword] =
         useState("");
@@ -33,6 +36,8 @@ export default function ChangePasswordPage() {
     const [submitting, setSubmitting] =
         useState(false);
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] =
+        useState<Record<string, string[]>>({});
     const [message, setMessage] = useState("");
 
     async function handleSubmit(
@@ -41,15 +46,16 @@ export default function ChangePasswordPage() {
         event.preventDefault();
 
         setError("");
+        setFieldErrors({});
         setMessage("");
 
         if (newPassword.length < 8) {
-            setError("Mật khẩu mới phải có ít nhất 8 ký tự.");
+            setError(t("changePassword.errors.passwordTooShort"));
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setError("Mật khẩu xác nhận không khớp.");
+            setError(t("changePassword.errors.confirmPasswordMismatch"));
             return;
         }
 
@@ -63,6 +69,7 @@ export default function ChangePasswordPage() {
         setSubmitting(true);
 
         try {
+            // Resolves to null — the backend sends no success message, so the copy lives here.
             await changePassword(token, {
                 currentPassword,
                 newPassword,
@@ -71,7 +78,7 @@ export default function ChangePasswordPage() {
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
-            setMessage("Đổi mật khẩu thành công.");
+            setMessage(t("changePassword.success"));
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 removeAccessToken();
@@ -79,11 +86,8 @@ export default function ChangePasswordPage() {
                 return;
             }
 
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Đổi mật khẩu thất bại.",
-            );
+            setError(translateError(err));
+            setFieldErrors(apiErrorDetails(err));
         } finally {
             setSubmitting(false);
         }
@@ -93,13 +97,13 @@ export default function ChangePasswordPage() {
         <main className="mx-auto grid min-h-[calc(100vh-180px)] max-w-[1100px] place-items-center p-6 max-sm:px-4">
         <section className="w-[min(100%,520px)] rounded-[18px] border border-border bg-surface p-[clamp(1.5rem,4vw,2.25rem)] shadow-[0_16px_40px_rgba(43,36,32,0.07)]">
         <p className="mb-[0.45rem] text-[0.75rem] font-bold tracking-[0.1em] text-accent-dark uppercase">
-            Bảo mật tài khoản
+            {t("changePassword.eyebrow")}
     </p>
 
-    <h1 className="mb-[0.65rem] font-heading text-[clamp(1.8rem,4vw,2.35rem)] font-bold">Đổi mật khẩu</h1>
+    <h1 className="mb-[0.65rem] font-heading text-[clamp(1.8rem,4vw,2.35rem)] font-bold">{t("changePassword.title")}</h1>
 
     <p className="leading-[1.6] text-text-secondary">
-        Sử dụng mật khẩu mạnh và không chia sẻ với người khác.
+        {t("changePassword.subtitle")}
     </p>
 
     <form
@@ -107,7 +111,7 @@ export default function ChangePasswordPage() {
     onSubmit={handleSubmit}
         >
         <label className={LABEL_CLASS}>
-            Mật khẩu hiện tại
+            {t("changePassword.currentPasswordLabel")}
     <input
     className={INPUT_CLASS}
     type="password"
@@ -118,10 +122,17 @@ export default function ChangePasswordPage() {
     autoComplete="current-password"
     required
     />
+
+    {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+    {fieldErrors.currentPassword?.map((msg) => (
+        <span key={msg} className="field-error">
+        {msg}
+        </span>
+    ))}
     </label>
 
     <label className={LABEL_CLASS}>
-    Mật khẩu mới
+    {t("changePassword.newPasswordLabel")}
     <input
     className={INPUT_CLASS}
     type="password"
@@ -133,10 +144,16 @@ export default function ChangePasswordPage() {
     minLength={8}
     required
     />
+
+    {fieldErrors.newPassword?.map((msg) => (
+        <span key={msg} className="field-error">
+        {msg}
+        </span>
+    ))}
     </label>
 
     <label className={LABEL_CLASS}>
-    Xác nhận mật khẩu mới
+    {t("changePassword.confirmPasswordLabel")}
     <input
     className={INPUT_CLASS}
     type="password"
@@ -156,8 +173,8 @@ export default function ChangePasswordPage() {
     disabled={submitting}
     >
     {submitting
-        ? "Đang cập nhật..."
-        : "Đổi mật khẩu"}
+        ? t("changePassword.submitting")
+        : t("changePassword.submit")}
     </button>
 
     {message && (

@@ -35,19 +35,14 @@ class AnalyzeResponse(BaseModel):
     imageUrl: str = Field(..., description="Presigned GET URL for the uploaded photo")
 
 
-class ErrorResponse(BaseModel):
-    """Generic error body shape for all domain error responses below."""
+class AnalyzeEnvelope(BaseModel):
+    """Success envelope for `POST /analyze` — `{"data": {...}}`."""
 
-    detail: str
-
-
-class NoFaceDetectedError(ErrorResponse):
-    detail: str = "Không phát hiện khuôn mặt nào trong ảnh đã tải lên."
+    data: AnalyzeResponse
 
 
-class MultipleFacesDetectedError(ErrorResponse):
-    detail: str = "Phát hiện nhiều khuôn mặt — vui lòng tải lên ảnh chỉ có đúng 1 khuôn mặt."
+class AnalysisListEnvelope(BaseModel):
+    """Success envelope for `GET /analyses` — `{"data": [...]}`, no `meta`: the history
+    endpoint is unpaginated (paging is a later change)."""
 
-
-class InvalidImageError(ErrorResponse):
-    detail: str = "Ảnh không hợp lệ: định dạng không được hỗ trợ hoặc tệp quá lớn."
+    data: list[AnalyzeResponse]

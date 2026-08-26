@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import * as FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 
 /**
@@ -86,14 +87,16 @@ export class FaceAnalysisProxyService {
   /**
    * Maps a downstream failure to a clear gateway-side error instead of
    * letting it surface as an unhandled 500:
-   * - downstream responded (e.g. 400) -> passthrough its status/body.
+   * - downstream responded (e.g. 422) -> passthrough its status/body verbatim
+   *   (`face-processing-service` already emits the `{"error": {...}}`
+   *   envelope, so the gateway must not reshape it).
    * - downstream timed out -> 504 Gateway Timeout.
    * - downstream unreachable (connection refused/reset/DNS) -> 503.
    */
   private toGatewayError(error: AxiosError, path: string): HttpException {
     if (error.response) {
       return new HttpException(
-        this.normalizeErrorBody(error.response.data) ?? error.message,
+        error.response.data ?? error.message,
         error.response.status,
       );
     }
@@ -101,34 +104,21 @@ export class FaceAnalysisProxyService {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       this.logger.error(`face-processing-service timed out on ${path}: ${error.message}`);
       return new HttpException(
-        'face-processing-service không phản hồi kịp thời',
+        apiError(
+          'UPSTREAM_TIMEOUT',
+          'face-processing-service did not respond in time',
+        ),
         HttpStatus.GATEWAY_TIMEOUT,
       );
     }
 
     this.logger.error(`face-processing-service unreachable on ${path}: ${error.message}`);
     return new HttpException(
-      'Không thể kết nối tới face-processing-service',
+      apiError(
+        'UPSTREAM_UNAVAILABLE',
+        'face-processing-service is unreachable',
+      ),
       HttpStatus.SERVICE_UNAVAILABLE,
     );
-  }
-
-  /**
-   * `face-processing-service` (FastAPI) returns errors as `{"detail": "..."}` by default —
-   * unlike `product-service` (Nest), whose exception filter already shapes errors as
-   * `{message: "..."}`, which is the key `web`'s `apiFetch` reads (see
-   * `web/src/lib/api/client.ts`). Without this, a real domain message like "No face detected"
-   * would silently get lost and `web` would fall back to a generic status-text error.
-   */
-  private normalizeErrorBody(data: unknown): unknown {
-    if (
-      data &&
-      typeof data === 'object' &&
-      'detail' in data &&
-      !('message' in data)
-    ) {
-      return { ...data, message: (data as { detail: unknown }).detail };
-    }
-    return data;
   }
 }

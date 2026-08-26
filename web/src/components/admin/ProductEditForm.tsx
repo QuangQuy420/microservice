@@ -2,21 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslations } from "next-intl";
 import {
-  ApiError,
+  apiErrorDetails,
   createProduct,
   getBrands,
   getCategories,
   updateProduct,
+  useApiError,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
-import {
-  FRAME_SHAPES,
-  GENDER_TARGETS,
-  formatFrameShapeVi,
-  GENDER_TARGET_LABELS_VI,
-} from "@/lib/labels";
+import { FRAME_SHAPES, GENDER_TARGETS, useLabels } from "@/lib/labels";
 import type { Brand } from "@/types/product";
 import type { Category } from "@/types/category";
 import type {
@@ -39,6 +36,7 @@ const CARD = "rounded-lg border border-border bg-surface p-5";
 const CARD_TITLE =
   "mb-4 text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase";
 const FORM_FIELD = "mb-1.5 block text-[0.8rem] font-medium";
+const FIELD_ERROR = "field-error mb-4";
 
 interface FormState {
   name: string;
@@ -66,7 +64,7 @@ function blankForm(): FormState {
     description: "",
     faceFitNote: "",
     faceShapes: [],
-    // Defaults to "Đang bán" (PUBLISHED) for new products — never left unset.
+    // Defaults to "on sale" (PUBLISHED) for new products — never left unset.
     status: "PUBLISHED",
   };
 }
@@ -87,9 +85,14 @@ function formFromProduct(product: Product): FormState {
   };
 }
 
-// Shared create/edit form (T18), matching Product Edit.dc.html's field set, order, and Vietnamese
-// labels. `product === null` means "create" (isNew); otherwise the form is prefilled for edit.
+// Shared create/edit form (T18), matching Product Edit.dc.html's field set and order; the labels
+// come from the `admin` message namespace. `product === null` means "create" (isNew); otherwise
+// the form is prefilled for edit.
 export function ProductEditForm({ product }: ProductEditFormProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
+  const labels = useLabels();
+  const translateError = useApiError();
   const router = useRouter();
   const isNew = product === null;
 
@@ -104,6 +107,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +125,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
         }));
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải danh mục/thương hiệu.");
+          setError(translateError(err));
         }
       }
     }
@@ -129,7 +133,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [translateError]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -145,18 +149,19 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     const basePrice = Number(form.basePrice);
     if (!form.name.trim()) {
-      setError("Vui lòng nhập tên sản phẩm.");
+      setError(t("products.nameRequired"));
       return;
     }
     if (!form.categoryId || !form.brandId) {
-      setError("Vui lòng chọn danh mục và thương hiệu.");
+      setError(t("products.categoryBrandRequired"));
       return;
     }
     if (!Number.isFinite(basePrice) || basePrice <= 0) {
-      setError("Vui lòng nhập giá hợp lệ.");
+      setError(t("products.priceInvalid"));
       return;
     }
 
@@ -176,7 +181,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
 
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("products.sessionExpired"));
       return;
     }
 
@@ -190,7 +195,8 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
       }
       router.push("/admin/products");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Lưu sản phẩm thất bại.");
+      setError(translateError(err));
+      setFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -205,7 +211,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
           href="/admin/products"
           className="flex items-center gap-2 text-sm font-medium text-text no-underline"
         >
-          ← Quay lại danh sách
+          ← {t("products.backToList")}
         </a>
         <div className="flex gap-2.5">
           <button
@@ -213,22 +219,22 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
             className="btn btn-outline"
             onClick={() => router.push("/admin/products")}
           >
-            Huỷ
+            {tCommon("cancel")}
           </button>
           <button type="submit" form="product-edit-form" className="btn btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? "Đang lưu…" : "Lưu sản phẩm"}
+            {isSubmitting ? tCommon("saving") : t("products.saveProduct")}
           </button>
         </div>
       </header>
 
       <form id="product-edit-form" className="mx-auto max-w-[980px] p-7" onSubmit={handleSubmit}>
         <div className="mb-1 font-heading text-2xl font-semibold">
-          {isNew ? "Thêm sản phẩm mới" : "Chỉnh sửa sản phẩm"}
+          {isNew ? t("products.newTitle") : t("products.editTitle")}
         </div>
         <div className="mb-6 text-[0.85rem] text-text-muted">
           {isNew
-            ? "Điền thông tin gọng kính để thêm vào danh mục."
-            : `Đang chỉnh sửa: ${product.name}`}
+            ? t("products.newSubtitle")
+            : t("products.editSubtitle", { name: product.name })}
         </div>
 
         {error && <p className="field-error my-[1em]">{error}</p>}
@@ -236,9 +242,9 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
         <div className="flex flex-col gap-6">
           <div className="w-full">
             <div className="rounded-lg border border-border bg-surface p-[1.125rem]">
-              <div className={CARD_TITLE}>Hình ảnh sản phẩm</div>
+              <div className={CARD_TITLE}>{t("products.imagesSection")}</div>
               {!savedProductId && (
-                <p className="text-xs text-text-muted">Lưu sản phẩm trước để tải ảnh lên.</p>
+                <p className="text-xs text-text-muted">{t("products.saveFirstForImages")}</p>
               )}
               <ProductImageManager
                 productId={savedProductId}
@@ -252,10 +258,10 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
 
           <div className="flex w-full flex-col gap-[1.125rem]">
             <div className={CARD}>
-              <div className={CARD_TITLE}>Thông tin cơ bản</div>
+              <div className={CARD_TITLE}>{t("products.basicSection")}</div>
 
               <label className={FORM_FIELD} htmlFor="product-name">
-                Tên sản phẩm
+                {t("products.nameLabel")}
               </label>
               <input
                 id="product-name"
@@ -263,11 +269,16 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                 value={form.name}
                 onChange={(event) => updateField("name", event.target.value)}
               />
+              {fieldErrors.name?.map((message) => (
+                <p key={message} role="alert" className={FIELD_ERROR}>
+                  {message}
+                </p>
+              ))}
 
               <div className="flex gap-3.5">
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-category">
-                    Danh mục
+                    {t("products.categoryLabel")}
                   </label>
                   <select
                     id="product-category"
@@ -281,10 +292,15 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.categoryId?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-brand">
-                    Thương hiệu
+                    {t("products.brandLabel")}
                   </label>
                   <select
                     id="product-brand"
@@ -298,13 +314,18 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.brandId?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
               </div>
 
               <div className="flex gap-3.5">
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-shape">
-                    Kiểu dáng gọng
+                    {t("products.frameShapeLabel")}
                   </label>
                   <select
                     id="product-shape"
@@ -316,14 +337,19 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                   >
                     {FRAME_SHAPES.map((shape) => (
                       <option key={shape} value={shape}>
-                        {formatFrameShapeVi(shape)}
+                        {labels.frameShape(shape)}
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.frameShape?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-price">
-                    Giá (VNĐ)
+                    {t("products.priceLabel")}
                   </label>
                   <input
                     id="product-price"
@@ -334,13 +360,18 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     value={form.basePrice}
                     onChange={(event) => updateField("basePrice", event.target.value)}
                   />
+                  {fieldErrors.basePrice?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
               </div>
 
               <div className="flex gap-3.5">
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-gender">
-                    Đối tượng
+                    {t("products.genderLabel")}
                   </label>
                   <select
                     id="product-gender"
@@ -352,14 +383,19 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                   >
                     {GENDER_TARGETS.map((gender) => (
                       <option key={gender} value={gender}>
-                        {GENDER_TARGET_LABELS_VI[gender]}
+                        {labels.genderTarget(gender)}
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.genderTarget?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
                 <div className="flex-1">
                   <label className={FORM_FIELD} htmlFor="product-material">
-                    Chất liệu
+                    {t("products.materialLabel")}
                   </label>
                   <input
                     id="product-material"
@@ -367,11 +403,16 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                     value={form.material}
                     onChange={(event) => updateField("material", event.target.value)}
                   />
+                  {fieldErrors.material?.map((message) => (
+                    <p key={message} role="alert" className={FIELD_ERROR}>
+                      {message}
+                    </p>
+                  ))}
                 </div>
               </div>
 
               <label className={FORM_FIELD} htmlFor="product-description">
-                Mô tả sản phẩm
+                {t("products.descriptionLabel")}
               </label>
               <textarea
                 id="product-description"
@@ -380,9 +421,14 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                 value={form.description}
                 onChange={(event) => updateField("description", event.target.value)}
               />
+              {fieldErrors.description?.map((message) => (
+                <p key={message} role="alert" className={FIELD_ERROR}>
+                  {message}
+                </p>
+              ))}
 
               <label className={FORM_FIELD} htmlFor="product-fit-note">
-                Ghi chú độ phù hợp khuôn mặt
+                {t("products.faceFitNoteLabel")}
               </label>
               <input
                 id="product-fit-note"
@@ -390,18 +436,28 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                 value={form.faceFitNote}
                 onChange={(event) => updateField("faceFitNote", event.target.value)}
               />
+              {fieldErrors.faceFitNote?.map((message) => (
+                <p key={message} role="alert" className={FIELD_ERROR}>
+                  {message}
+                </p>
+              ))}
             </div>
 
             <div className={CARD}>
-              <div className={CARD_TITLE}>Phù hợp với dáng mặt</div>
+              <div className={CARD_TITLE}>{t("products.faceShapesSection")}</div>
               <FaceShapeTagPicker
                 selected={form.faceShapes}
                 onChange={(next) => updateField("faceShapes", next)}
               />
+              {fieldErrors.faceShapes?.map((message) => (
+                <p key={message} role="alert" className={FIELD_ERROR}>
+                  {message}
+                </p>
+              ))}
             </div>
 
             <div className={CARD}>
-              <div className={CARD_TITLE}>Biến thể (màu sắc / kích thước / tồn kho)</div>
+              <div className={CARD_TITLE}>{t("products.variantsSection")}</div>
               <ProductVariantsEditor
                 productId={savedProductId}
                 variants={variants}
@@ -412,9 +468,9 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
 
             <div className={cn(CARD, "flex items-center justify-between gap-4")}>
               <div>
-                <div className="mb-0.5 text-sm font-semibold">Trạng thái bán</div>
+                <div className="mb-0.5 text-sm font-semibold">{t("products.statusSection")}</div>
                 <div className="text-[0.78rem] text-text-muted">
-                  Ẩn sản phẩm khỏi danh mục nếu hết hàng.
+                  {t("products.statusHint")}
                 </div>
               </div>
               <button
@@ -425,7 +481,7 @@ export function ProductEditForm({ product }: ProductEditFormProps) {
                 )}
                 onClick={toggleStatus}
                 aria-pressed={isPublished}
-                aria-label="Trạng thái bán"
+                aria-label={t("products.statusSection")}
               >
                 <span
                   className={cn(

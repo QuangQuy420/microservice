@@ -55,11 +55,14 @@ describe('Products/categories proxy (e2e)', () => {
     );
   });
 
-  it('GET /api/products/:id passes through a downstream 404', async () => {
+  it('GET /api/products/:id passes a downstream 404 envelope through verbatim', async () => {
+    const downstreamBody = {
+      error: { code: 'PRODUCT_NOT_FOUND', message: 'Product not found' },
+    };
     const axiosError = {
       isAxiosError: true,
       message: 'Request failed with status code 404',
-      response: { status: 404, data: { message: 'Product not found' } },
+      response: { status: 404, data: downstreamBody },
     } as AxiosError;
     httpService.get.mockReturnValue(throwError(() => axiosError));
 
@@ -67,10 +70,10 @@ describe('Products/categories proxy (e2e)', () => {
       .get('/api/products/missing-id')
       .expect(404);
 
-    expect(res.body).toMatchObject({ message: 'Product not found' });
+    expect(res.body).toEqual(downstreamBody);
   });
 
-  it('GET /api/products returns 503 with a clear message when product-service is unreachable', async () => {
+  it('GET /api/products returns an enveloped 503 when product-service is unreachable', async () => {
     const axiosError = {
       isAxiosError: true,
       message: 'connect ECONNREFUSED 127.0.0.1:3002',
@@ -80,7 +83,12 @@ describe('Products/categories proxy (e2e)', () => {
 
     const res = await request(app.getHttpServer()).get('/api/products').expect(503);
 
-    expect(res.body.message).toContain('unreachable');
+    expect(res.body).toEqual({
+      error: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'product-service is unreachable',
+      },
+    });
   });
 
   it('GET /api/categories forwards to product-service and returns its body', async () => {

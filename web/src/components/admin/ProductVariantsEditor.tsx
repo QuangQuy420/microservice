@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, createVariant, deleteVariant, updateVariant } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import {
+  apiErrorDetails,
+  createVariant,
+  deleteVariant,
+  updateVariant,
+  useApiError,
+} from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
 import type { ProductImage, ProductVariant } from "@/types/product";
@@ -47,30 +54,33 @@ function draftFromVariant(variant: ProductVariant): VariantDraft {
   };
 }
 
+type AdminTranslator = ReturnType<typeof useTranslations<"admin">>;
+
 /** Returns the parsed payload, or null (after setting `setError`) if the draft is invalid. */
 function parseDraft(
   draft: VariantDraft,
   setError: (message: string) => void,
+  t: AdminTranslator,
 ): { color: string; colorHex: string; size: string; extraPrice: number; stock: number } | null {
   const color = draft.color.trim();
   const size = draft.size.trim();
   if (!color || !size) {
-    setError("Vui lòng nhập màu sắc và kích thước.");
+    setError(t("variants.colorSizeRequired"));
     return null;
   }
   const colorHex = draft.colorHex.trim();
   if (!HEX_COLOR_PATTERN.test(colorHex)) {
-    setError("Mã màu không hợp lệ, vui lòng chọn lại màu.");
+    setError(t("variants.colorHexInvalid"));
     return null;
   }
   const extraPrice = Number(draft.extraPrice);
   if (!Number.isFinite(extraPrice) || extraPrice < 0) {
-    setError("Giá thêm không hợp lệ.");
+    setError(t("variants.extraPriceInvalid"));
     return null;
   }
   const stock = Number(draft.stock);
   if (!Number.isInteger(stock) || stock < 0) {
-    setError("Tồn kho không hợp lệ.");
+    setError(t("variants.stockInvalid"));
     return null;
   }
   return { color, colorHex, size, extraPrice, stock };
@@ -85,18 +95,20 @@ export function ProductVariantsEditor({
   images,
   onChange,
 }: ProductVariantsEditorProps) {
+  const t = useTranslations("admin");
+
   if (!productId) {
-    return <p className="text-xs text-text-muted">Lưu sản phẩm trước để quản lý biến thể.</p>;
+    return <p className="text-xs text-text-muted">{t("variants.saveFirst")}</p>;
   }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <div className={cn(ROW, ROW_HEAD)}>
-          <span>Màu sắc</span>
-          <span>Kích thước</span>
-          <span>Giá thêm</span>
-          <span>Tồn kho</span>
+          <span>{t("variants.columnColor")}</span>
+          <span>{t("variants.columnSize")}</span>
+          <span>{t("variants.columnExtraPrice")}</span>
+          <span>{t("variants.columnStock")}</span>
           <span></span>
         </div>
         {variants.map((variant) => (
@@ -115,7 +127,7 @@ export function ProductVariantsEditor({
         ))}
         {variants.length === 0 && (
           <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
-            Chưa có biến thể nào.
+            {t("variants.empty")}
           </div>
         )}
       </div>
@@ -136,10 +148,14 @@ interface VariantRowProps {
 }
 
 function VariantRow({ productId, variant, images, onUpdated, onDeleted }: VariantRowProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
+  const translateError = useApiError();
   const [draft, setDraft] = useState<VariantDraft>(draftFromVariant(variant));
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   function updateDraft<K extends keyof VariantDraft>(key: K, value: VariantDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -147,12 +163,13 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
 
   async function handleSave() {
     setError(null);
-    const parsed = parseDraft(draft, setError);
+    setFieldErrors({});
+    const parsed = parseDraft(draft, setError, t);
     if (!parsed) return;
 
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("variants.sessionExpired"));
       return;
     }
 
@@ -161,7 +178,8 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
       const updated = await updateVariant(productId, variant.id, parsed, token);
       onUpdated(updated);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể lưu phiên bản.");
+      setError(translateError(err));
+      setFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSaving(false);
     }
@@ -169,9 +187,10 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
 
   async function handleDelete() {
     setError(null);
+    setFieldErrors({});
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("variants.sessionExpired"));
       return;
     }
 
@@ -180,7 +199,7 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
       await deleteVariant(productId, variant.id, token);
       onDeleted(variant.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể xoá phiên bản.");
+      setError(translateError(err));
       setIsDeleting(false);
     }
   }
@@ -193,21 +212,21 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
             className="input flex-1"
             value={draft.color}
             onChange={(event) => updateDraft("color", event.target.value)}
-            aria-label="Màu sắc"
+            aria-label={t("variants.colorAria")}
           />
           <input
             type="color"
             className={COLOR_PICKER}
             value={draft.colorHex}
             onChange={(event) => updateDraft("colorHex", event.target.value)}
-            aria-label="Mã màu"
+            aria-label={t("variants.colorHexAria")}
           />
         </div>
         <input
           className="input"
           value={draft.size}
           onChange={(event) => updateDraft("size", event.target.value)}
-          aria-label="Kích thước"
+          aria-label={t("variants.sizeAria")}
         />
         <input
           className="input"
@@ -216,7 +235,7 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
           step="1000"
           value={draft.extraPrice}
           onChange={(event) => updateDraft("extraPrice", event.target.value)}
-          aria-label="Giá thêm"
+          aria-label={t("variants.extraPriceAria")}
         />
         <input
           className="input"
@@ -225,7 +244,7 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
           step="1"
           value={draft.stock}
           onChange={(event) => updateDraft("stock", event.target.value)}
-          aria-label="Tồn kho"
+          aria-label={t("variants.stockAria")}
         />
         <div className="flex gap-2">
           <button
@@ -234,7 +253,7 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
             onClick={handleSave}
             disabled={isSaving || isDeleting}
           >
-            {isSaving ? "Đang lưu…" : "Lưu"}
+            {isSaving ? tCommon("saving") : t("variants.save")}
           </button>
           <button
             type="button"
@@ -242,10 +261,17 @@ function VariantRow({ productId, variant, images, onUpdated, onDeleted }: Varian
             onClick={handleDelete}
             disabled={isSaving || isDeleting}
           >
-            {isDeleting ? "Đang xoá…" : "Xoá"}
+            {isDeleting ? t("variants.deleting") : tCommon("delete")}
           </button>
         </div>
         {error && <p className="field-error my-[1em]">{error}</p>}
+        {Object.values(fieldErrors)
+          .flat()
+          .map((message) => (
+            <p key={message} role="alert" className="field-error my-[1em]">
+              {message}
+            </p>
+          ))}
       </div>
       <div className="px-[1.1rem] pt-3 pb-4">
         <ProductImageManager
@@ -266,9 +292,12 @@ interface NewVariantRowProps {
 }
 
 function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
+  const t = useTranslations("admin");
+  const translateError = useApiError();
   const [draft, setDraft] = useState<VariantDraft>(blankDraft());
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   function updateDraft<K extends keyof VariantDraft>(key: K, value: VariantDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -276,12 +305,13 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
 
   async function handleAdd() {
     setError(null);
-    const parsed = parseDraft(draft, setError);
+    setFieldErrors({});
+    const parsed = parseDraft(draft, setError, t);
     if (!parsed) return;
 
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("variants.sessionExpired"));
       return;
     }
 
@@ -291,7 +321,8 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
       onCreated(created);
       setDraft(blankDraft());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể thêm phiên bản.");
+      setError(translateError(err));
+      setFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSaving(false);
     }
@@ -302,45 +333,45 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
       <div className="flex items-center gap-[0.4rem]">
         <input
           className="input flex-1"
-          placeholder="Màu sắc"
+          placeholder={t("variants.columnColor")}
           value={draft.color}
           onChange={(event) => updateDraft("color", event.target.value)}
-          aria-label="Màu sắc biến thể mới"
+          aria-label={t("variants.newColorAria")}
         />
         <input
           type="color"
           className={COLOR_PICKER}
           value={draft.colorHex}
           onChange={(event) => updateDraft("colorHex", event.target.value)}
-          aria-label="Mã màu biến thể mới"
+          aria-label={t("variants.newColorHexAria")}
         />
       </div>
       <input
         className="input"
-        placeholder="Kích thước"
+        placeholder={t("variants.columnSize")}
         value={draft.size}
         onChange={(event) => updateDraft("size", event.target.value)}
-        aria-label="Kích thước biến thể mới"
+        aria-label={t("variants.newSizeAria")}
       />
       <input
         className="input"
         type="number"
         min="0"
         step="1000"
-        placeholder="Giá thêm"
+        placeholder={t("variants.columnExtraPrice")}
         value={draft.extraPrice}
         onChange={(event) => updateDraft("extraPrice", event.target.value)}
-        aria-label="Giá thêm biến thể mới"
+        aria-label={t("variants.newExtraPriceAria")}
       />
       <input
         className="input"
         type="number"
         min="0"
         step="1"
-        placeholder="Tồn kho"
+        placeholder={t("variants.columnStock")}
         value={draft.stock}
         onChange={(event) => updateDraft("stock", event.target.value)}
-        aria-label="Tồn kho biến thể mới"
+        aria-label={t("variants.newStockAria")}
       />
       <button
         type="button"
@@ -348,11 +379,18 @@ function NewVariantRow({ productId, onCreated }: NewVariantRowProps) {
         onClick={handleAdd}
         disabled={isSaving}
       >
-        {isSaving ? "Đang thêm…" : "Thêm biến thể"}
+        {isSaving ? t("variants.adding") : t("variants.add")}
       </button>
       {error && <p className="field-error my-[1em]">{error}</p>}
+      {Object.values(fieldErrors)
+        .flat()
+        .map((message) => (
+          <p key={message} role="alert" className="field-error my-[1em]">
+            {message}
+          </p>
+        ))}
       <p className="col-span-full text-xs text-text-muted">
-        Thêm biến thể trước để tải ảnh riêng cho biến thể này.
+        {t("variants.addImageHint")}
       </p>
     </div>
   );

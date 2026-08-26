@@ -1,4 +1,5 @@
-export { ApiError, apiFetch } from "./client";
+export { ApiError, apiFetch, apiFetchList } from "./client";
+export { apiErrorDetails, translateApiError, useApiError } from "./errors";
 
 export {
   login,

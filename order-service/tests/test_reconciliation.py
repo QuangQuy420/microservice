@@ -47,7 +47,7 @@ class TestStuckOrderResend:
         assert _outbox_keys(session) == ["stock.reserve.requested"]
         logs = session.scalars(select(OrderSagaLog)).all()
         assert logs[0].stage == "RECONCILIATION_RESENT"
-        assert logs[0].message == "Đã gửi lại lệnh saga (lần thử 1)"
+        assert logs[0].message == "Saga command resent (attempt 1)"
         assert logs[0].retry_count == 1
 
     def test_stuck_awaiting_payment_resends_payment_create(self, session):
@@ -113,7 +113,7 @@ class TestExhaustion:
         assert order.status == "CANCELLED"
         assert (
             order.status_histories[-1].note
-            == "Hệ thống tự hủy do vượt quá số lần thử xử lý saga tự động"
+            == "Auto-cancelled: exceeded the automatic saga retry limit"
         )
         assert _outbox_keys(session) == ["stock.release.requested"]
         stages = _stages(session, order.id)

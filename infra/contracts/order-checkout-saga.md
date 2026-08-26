@@ -83,13 +83,25 @@ is fanned out to the separate order-service and product-service queues.
 {
   "orderId": "3e2f9c2a-1234-4a5b-8c6d-000000000001",
   "occurredAt": "2026-07-28T10:16:01",
-  "reason": "Không đủ hàng cho biến thể \"Gọng kính Ray-Ban RB2140 - Đen - Size 52\" (còn 1, cần 2)"
+  "reason": "Insufficient stock for variant b1a2c3d4-0000-0000-0000-000000000010 (requested 2, available 1)"
 }
 ```
-- `reason`: a human-readable string, **in Vietnamese** — it is recorded on
-  `OrderStatusHistory` and is meant to eventually reach the customer through `web` (project-wide
-  convention: all user-facing text is Vietnamese, see root `CLAUDE.md`). Names the specific short
-  item the same way the superseded `2026-07-20-stock-reservation.md` plan's error messages did.
+- `reason`: a human-readable string, **in English**. Backend-authored text is English
+  developer-facing text; `web` translates for the customer (see the
+  `.planning/2026-08-26-i18n-language-switch.md` decisions — the language switch lives in the
+  frontend, so no service emits localized copy).
+- Authored by product-service's `InsufficientStockError`
+  (`src/repositories/inventory.repository.ts`) and travels verbatim: one clause per short item,
+
+  ```
+  Insufficient stock for variant <variantId> (requested <N>, available <M>)
+  ```
+
+  and, when several items are short, the clauses are joined with `"; "` in the same message.
+  The identifier in the text is the **variant UUID**, not a display name — product-service does
+  not load the product title on this path.
+- order-service records the string verbatim on `OrderStatusHistory` (falling back to
+  `"Not enough stock available"` when the event carries no `reason`).
 
 ### `payment.create.requested` (order-service → payment-service)
 ```json
@@ -109,7 +121,7 @@ is fanned out to the separate order-service and product-service queues.
 - `payment-service` currently only accepts `"CARD"` as `paymentMethod` — this is the storefront's
   only offered payment method (`web`'s checkout picker offers no other option). Any other value
   (including the retired `"COD"`/`"BANK_TRANSFER"`) is treated as an unsupported method and fails
-  immediately with a Vietnamese reason naming it.
+  immediately with an English `payment.failed` reason naming it.
 
 ### `payment.completed` (payment-service → order-service, product-service)
 ```json
@@ -131,10 +143,23 @@ is fanned out to the separate order-service and product-service queues.
 {
   "orderId": "3e2f9c2a-1234-4a5b-8c6d-000000000001",
   "occurredAt": "2026-07-28T10:17:45",
-  "reason": "Thanh toán bị từ chối bởi ngân hàng phát hành thẻ"
+  "reason": "Unsupported payment method: COD"
 }
 ```
-- `reason`: human-readable, **in Vietnamese** — same convention as `stock.reserve.rejected`.
+- `reason`: human-readable, **in English** — same convention as `stock.reserve.rejected`, and
+  likewise recorded verbatim on `OrderStatusHistory` (order-service falls back to
+  `"Payment failed"` when the event carries no `reason`).
+- payment-service authors exactly two reasons (`src/services/payments.service.ts`); there is no
+  bank-decline branch in the code:
+
+  | Trigger | `reason` |
+  |---|---|
+  | `paymentMethod` is anything other than `"CARD"` | `Unsupported payment method: <method>` |
+  | `amount` below `PAYMENT_MIN_CARD_AMOUNT` (default `1000000`) | `Payment amount is below the minimum (minimum <amount> VND)` |
+
+  The amount is a plain integer followed by `VND` — no locale grouping and no `₫` symbol.
+  (Earlier revisions of this contract showed an illustrative "declined by the issuing bank"
+  example; it never matched any code path and has been replaced by a real reason.)
 
 ### `stock.release.requested` (order-service → product-service)
 ```json

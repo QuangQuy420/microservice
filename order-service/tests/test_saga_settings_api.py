@@ -14,13 +14,16 @@ class TestGetSettings:
     def test_404_when_not_initialized(self, client):
         res = client.get("/api/v1/admin/saga-settings")
         assert res.status_code == 404
-        assert res.json()["message"] == "Chưa có cấu hình reconciliation nào được khởi tạo"
+        assert res.json()["error"] == {
+            "code": "SETTINGS_NOT_FOUND",
+            "message": "No reconciliation settings have been initialized",
+        }
 
     def test_get_returns_settings(self, client, session):
         seed_settings(session, interval_ms=60000, stuck_threshold_minutes=2, max_attempts=3)
         res = client.get("/api/v1/admin/saga-settings")
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert body["intervalMs"] == 60000
         assert body["stuckThresholdMinutes"] == 2
         assert body["maxAttempts"] == 3
@@ -36,7 +39,7 @@ class TestUpdateSettings:
             json={"intervalMs": 30000, "stuckThresholdMinutes": 5, "maxAttempts": 10},
         )
         assert res.status_code == 400
-        assert res.json()["message"] == "Thiếu header bắt buộc: X-User-Id"
+        assert res.json()["error"]["code"] == "MISSING_HEADER"
 
     def test_update_roundtrip(self, client, session):
         seed_settings(session)
@@ -46,13 +49,13 @@ class TestUpdateSettings:
             headers=HEADERS,
         )
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert body["intervalMs"] == 30000
         assert body["stuckThresholdMinutes"] == 5
         assert body["maxAttempts"] == 10
         assert body["updatedBy"] == ADMIN
 
-        again = client.get("/api/v1/admin/saga-settings").json()
+        again = client.get("/api/v1/admin/saga-settings").json()["data"]
         assert again["intervalMs"] == 30000
         assert again["updatedBy"] == ADMIN
 
@@ -69,6 +72,7 @@ class TestUpdateSettings:
     def test_validation(self, client, session, body, field):
         seed_settings(session)
         res = client.put("/api/v1/admin/saga-settings", json=body, headers=HEADERS)
-        assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
-        assert field in res.json()["validationErrors"]
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert isinstance(error["details"][field], list)

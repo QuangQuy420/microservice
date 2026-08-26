@@ -1,33 +1,40 @@
-"""Business error codes → (HTTP status, byte-identical Vietnamese message)."""
+"""Error codes → (HTTP status, English message).
 
-VALIDATION_FAILED_MESSAGE = "Dữ liệu đầu vào không hợp lệ"
-INTERNAL_SERVER_ERROR_MESSAGE = "Đã xảy ra lỗi hệ thống"
-INTERNAL_KEY_INVALID_MESSAGE = "Yêu cầu nội bộ không hợp lệ"
+The code is the stable machine-readable contract; the message is a
+developer-facing English fallback — clients translate by code.
+"""
 
 ERROR_CATALOG: dict[str, tuple[int, str]] = {
-    "EMAIL_ALREADY_EXISTS": (409, "Email đã được sử dụng"),
-    "USERNAME_ALREADY_EXISTS": (409, "Username đã được sử dụng"),
-    "INVALID_TOKEN": (401, "Token không hợp lệ hoặc đã hết hạn"),
-    "INVALID_CREDENTIALS": (401, "Email, username hoặc mật khẩu không chính xác"),
-    "PROFILE_NOT_FOUND": (404, "Không tìm thấy hồ sơ người dùng"),
-    "USER_NOT_FOUND": (404, "Không tìm thấy người dùng"),
-    "CURRENT_PASSWORD_INCORRECT": (400, "Mật khẩu hiện tại không chính xác"),
+    "EMAIL_ALREADY_EXISTS": (409, "Email already exists"),
+    "USERNAME_ALREADY_EXISTS": (409, "Username already exists"),
+    "INVALID_TOKEN": (401, "Token is invalid or has expired"),
+    "INVALID_CREDENTIALS": (401, "Email, username or password is incorrect"),
+    "PROFILE_NOT_FOUND": (404, "User profile not found"),
+    "USER_NOT_FOUND": (404, "User not found"),
+    "CURRENT_PASSWORD_INCORRECT": (400, "Current password is incorrect"),
     "NEW_PASSWORD_SAME_AS_CURRENT": (
         400,
-        "Mật khẩu mới không được giống mật khẩu hiện tại",
+        "New password must be different from the current password",
     ),
-    "VALIDATION_FAILED": (400, VALIDATION_FAILED_MESSAGE),
-    "RESET_TOKEN_INVALID": (400, "Reset token không hợp lệ"),
-    "RESET_TOKEN_EXPIRED": (400, "Reset token đã hết hạn"),
-    "RESET_TOKEN_USED": (400, "Reset token đã được sử dụng"),
-    "ROLE_NOT_FOUND": (404, "Không tìm thấy vai trò"),
-    "ROLE_ALREADY_EXISTS": (409, "Tên vai trò đã tồn tại"),
-    "ROLE_IN_USE": (409, "Không thể xóa vai trò đang được gán cho người dùng"),
-    "PERMISSION_NOT_FOUND": (404, "Không tìm thấy quyền"),
-    "USER_ROLE_NOT_ASSIGNED": (404, "Người dùng chưa được gán vai trò này"),
-    "FORBIDDEN": (403, "Bạn không có quyền thực hiện thao tác này"),
-    "ADDRESS_NOT_FOUND": (404, "Không tìm thấy địa chỉ"),
-    "INTERNAL_SERVER_ERROR": (500, INTERNAL_SERVER_ERROR_MESSAGE),
+    "RESET_TOKEN_INVALID": (400, "Reset token is invalid"),
+    "RESET_TOKEN_EXPIRED": (400, "Reset token has expired"),
+    "RESET_TOKEN_USED": (400, "Reset token has already been used"),
+    "ROLE_NOT_FOUND": (404, "Role not found"),
+    "ROLE_ALREADY_EXISTS": (409, "Role name already exists"),
+    "ROLE_IN_USE": (409, "Cannot delete a role that is assigned to users"),
+    "PERMISSION_NOT_FOUND": (404, "Permission not found"),
+    "USER_ROLE_NOT_ASSIGNED": (404, "User does not have this role"),
+    "FORBIDDEN": (403, "You do not have permission to perform this action"),
+    "INVALID_INTERNAL_KEY": (403, "Invalid internal request"),
+    "ADDRESS_NOT_FOUND": (404, "Address not found"),
+    # Generic protocol/framework fallbacks
+    "MALFORMED_REQUEST": (400, "Malformed request"),
+    "NOT_FOUND": (404, "Resource not found"),
+    "METHOD_NOT_ALLOWED": (405, "Method not allowed"),
+    "UNSUPPORTED_MEDIA_TYPE": (415, "Unsupported media type"),
+    "VALIDATION_ERROR": (422, "Invalid input"),
+    "THROTTLED": (429, "Too many requests"),
+    "INTERNAL_ERROR": (500, "Internal server error"),
 }
 
 

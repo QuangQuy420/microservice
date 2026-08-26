@@ -14,18 +14,19 @@ router = APIRouter(prefix="/api/v1/admin/orders")
 def list_orders(
     request: Request,
     status: str | None = Query(default=None),
-    page: int = Query(default=0),
-    size: int = Query(default=20),
+    page: int = Query(default=1),
+    page_size: int = Query(default=20, alias="pageSize"),
     session: Session = Depends(get_session),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.list_admin_orders(status, page, size))
+    # already the {"data", "meta"} list envelope
+    return VNJSONResponse(content=service.list_admin_orders(status, page, page_size))
 
 
 @router.get("/summary")
 def summary(request: Request, session: Session = Depends(get_session)):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.admin_summary())
+    return VNJSONResponse(content={"data": service.admin_summary()})
 
 
 @router.get("/{order_id}")
@@ -33,7 +34,7 @@ def get_order(
     order_id: str, request: Request, session: Session = Depends(get_session)
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.get_admin_order(order_id))
+    return VNJSONResponse(content={"data": service.get_admin_order(order_id)})
 
 
 @router.patch("/{order_id}/status")
@@ -45,4 +46,6 @@ def update_status(
     user_id: str = Depends(require_user_id_header),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.update_status_admin(order_id, user_id, body))
+    return VNJSONResponse(
+        content={"data": service.update_status_admin(order_id, user_id, body)}
+    )

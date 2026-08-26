@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
-import { ApiError, cancelOrder, getOrderById } from "@/lib/api";
+import { apiErrorDetails, cancelOrder, getOrderById, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { getColorSwatch } from "@/lib/format/color";
 import { formatPriceVnd } from "@/lib/format/price";
-import { formatOrderStatusVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import type { Order } from "@/types/order";
 
 interface OrderDetailPageProps {
@@ -27,16 +28,21 @@ const SECTION_TEXT = "mb-2 text-[0.9rem] leading-[1.6] text-text-secondary last:
 // while the order is still PENDING/AWAITING_PAYMENT/CONFIRMED (matches order-service's
 // OrderServiceImpl.cancelOrder eligibility check).
 export function OrderDetailPage({ id }: OrderDetailPageProps) {
+  const t = useTranslations("orders");
+  const labels = useLabels();
+  const translateError = useApiError();
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  // Field-level messages from a 422 on the cancel call (`reason`), rendered as-is (FR5).
+  const [cancelFieldErrors, setCancelFieldErrors] = useState<Record<string, string[]>>({});
 
   async function loadOrder() {
     const token = getAccessToken();
     if (!token) {
-      setError("Bạn cần đăng nhập để xem đơn hàng.");
+      setError(t("detail.loginRequired"));
       setIsLoading(false);
       return;
     }
@@ -47,7 +53,7 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
       const result = await getOrderById(token, id);
       setOrder(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể tải thông tin đơn hàng.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +66,7 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
       const token = getAccessToken();
       if (!token) {
         if (!cancelled) {
-          setError("Bạn cần đăng nhập để xem đơn hàng.");
+          setError(t("detail.loginRequired"));
           setIsLoading(false);
         }
         return;
@@ -73,7 +79,7 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
         if (!cancelled) setOrder(result);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải thông tin đơn hàng.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -85,34 +91,36 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, t, translateError]);
 
   async function handleCancel() {
     const token = getAccessToken();
     if (!token) return;
 
-    const reason = window.prompt("Vui lòng nhập lý do hủy đơn hàng:");
+    const reason = window.prompt(t("detail.cancelPrompt"));
     if (reason === null) return;
     if (!reason.trim()) {
-      setCancelError("Lý do hủy đơn không được để trống.");
+      setCancelError(t("detail.cancelReasonRequired"));
       return;
     }
 
     setIsCancelling(true);
     setCancelError(null);
+    setCancelFieldErrors({});
     try {
       await cancelOrder(token, id, reason.trim());
       await loadOrder();
     } catch (err) {
-      setCancelError(err instanceof ApiError ? err.message : "Không thể hủy đơn hàng.");
+      setCancelError(translateError(err));
+      setCancelFieldErrors(apiErrorDetails(err));
     } finally {
       setIsCancelling(false);
     }
   }
 
-  if (isLoading) return <LoadingState label="Đang tải đơn hàng..." />;
+  if (isLoading) return <LoadingState label={t("loading")} />;
   if (error) return <ErrorState message={error} />;
-  if (!order) return <ErrorState message="Không tìm thấy đơn hàng." />;
+  if (!order) return <ErrorState message={t("detail.notFound")} />;
 
   const canCancel = CANCELLABLE_STATUSES.has(order.status);
 
@@ -128,28 +136,28 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
-        Về danh sách đơn hàng
+        {t("detail.backToList")}
       </Link>
 
       <h1
         id="order-detail-heading"
         className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text"
       >
-        Đơn hàng {order.orderCode}
+        {t("detail.title", { code: order.orderCode })}
       </h1>
       <p className="-mt-3 mb-6 text-[0.95rem] text-text-secondary">
-        Trạng thái: {formatOrderStatusVi(order.status)}
+        {t("detail.status", { status: labels.orderStatus(order.status) })}
       </p>
 
-      <section aria-label="Lịch sử trạng thái" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Lịch sử trạng thái</h2>
+      <section aria-label={t("detail.statusHistoryTitle")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("detail.statusHistoryTitle")}</h2>
         <ul className="flex flex-col gap-[0.6rem]">
           {order.statusHistories.map((entry) => (
             <li
               key={entry.id}
               className="rounded-lg bg-[rgba(43,36,32,0.035)] px-3 py-[0.6rem] text-[0.85rem] text-text-secondary"
             >
-              <span>{formatOrderStatusVi(entry.status)}</span>
+              <span>{labels.orderStatus(entry.status)}</span>
               {entry.note && <span> — {entry.note}</span>}
               <span> ({new Date(entry.changedAt).toLocaleString("vi-VN")})</span>
             </li>
@@ -157,17 +165,19 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
         </ul>
       </section>
 
-      <section aria-label="Thông tin giao hàng" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Thông tin giao hàng</h2>
-        <p className={SECTION_TEXT}>Người nhận: {order.receiverName}</p>
-        <p className={SECTION_TEXT}>Số điện thoại: {order.receiverPhone}</p>
-        <p className={SECTION_TEXT}>Địa chỉ: {order.shippingAddress}</p>
-        {order.note && <p className={SECTION_TEXT}>Ghi chú: {order.note}</p>}
-        <p className={SECTION_TEXT}>Phương thức thanh toán: {order.paymentMethod}</p>
+      <section aria-label={t("detail.shippingTitle")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("detail.shippingTitle")}</h2>
+        <p className={SECTION_TEXT}>{t("detail.receiver", { name: order.receiverName })}</p>
+        <p className={SECTION_TEXT}>{t("detail.phone", { phone: order.receiverPhone })}</p>
+        <p className={SECTION_TEXT}>{t("detail.address", { address: order.shippingAddress })}</p>
+        {order.note && <p className={SECTION_TEXT}>{t("detail.note", { note: order.note })}</p>}
+        <p className={SECTION_TEXT}>
+          {t("detail.paymentMethod", { method: order.paymentMethod })}
+        </p>
       </section>
 
-      <section aria-label="Sản phẩm trong đơn hàng" className={SECTION}>
-        <h2 className={SECTION_HEADING}>Sản phẩm</h2>
+      <section aria-label={t("detail.itemsSectionAria")} className={SECTION}>
+        <h2 className={SECTION_HEADING}>{t("detail.itemsTitle")}</h2>
         <ul className="mb-4 flex flex-col gap-[0.65rem]">
           {order.items.map((item) => (
             <li
@@ -182,7 +192,12 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
                   aria-label={item.color}
                   title={item.color}
                 />
-                {item.productName} ({item.color}, {item.size}) x{item.quantity}
+                {t("detail.item", {
+                  name: item.productName,
+                  color: item.color,
+                  size: item.size,
+                  quantity: item.quantity,
+                })}
               </span>
               <span className="shrink-0 font-semibold text-text">
                 {formatPriceVnd(item.subtotal)}
@@ -191,7 +206,7 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
           ))}
         </ul>
         <p className="pt-1 text-[1.05rem] text-text-secondary">
-          Tổng cộng:{" "}
+          {t("detail.total")}{" "}
           <strong className="text-[1.2rem] text-text">{formatPriceVnd(order.totalAmount)}</strong>
         </p>
       </section>
@@ -204,13 +219,21 @@ export function OrderDetailPage({ id }: OrderDetailPageProps) {
             onClick={handleCancel}
             disabled={isCancelling}
           >
-            {isCancelling ? "Đang hủy đơn..." : "Hủy đơn hàng"}
+            {isCancelling ? t("detail.cancelling") : t("detail.cancel")}
           </button>
           {cancelError && (
             <p role="alert" className="my-[1em] text-[#a92828]">
               {cancelError}
             </p>
           )}
+          {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+          {Object.values(cancelFieldErrors)
+            .flat()
+            .map((message) => (
+              <span key={message} role="alert" className="field-error">
+                {message}
+              </span>
+            ))}
         </div>
       )}
     </article>

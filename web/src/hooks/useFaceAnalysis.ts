@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, analyzeFace } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { analyzeFace, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import type { FaceAnalysisResult } from "@/types/face";
 
@@ -17,12 +18,14 @@ export function useFaceAnalysis(): UseFaceAnalysisResult {
   const [result, setResult] = useState<FaceAnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("face");
+  const translateError = useApiError();
 
   async function analyze(file: File) {
     const token = getAccessToken();
     if (!token) {
       setResult(null);
-      setError("You must be logged in to analyze a photo.");
+      setError(t("loginRequired"));
       return;
     }
 
@@ -37,7 +40,7 @@ export function useFaceAnalysis(): UseFaceAnalysisResult {
       setResult(analysis);
     } catch (err) {
       setResult(null);
-      setError(err instanceof ApiError ? err.message : "Face analysis failed.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }

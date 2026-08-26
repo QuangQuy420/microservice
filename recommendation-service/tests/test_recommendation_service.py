@@ -80,8 +80,8 @@ def test_recommend_ranks_products_by_frame_shape_score_for_the_requested_face_sh
 
     response = asyncio.run(service.recommend(RecommendRequest(faceShape=FaceShape.ROUND)))
 
-    assert [item.id for item in response.items] == ["b", "c", "a"]
-    assert response.items[0].score > response.items[1].score > response.items[2].score
+    assert [item.id for item in response.data] == ["b", "c", "a"]
+    assert response.data[0].score > response.data[1].score > response.data[2].score
 
 
 def test_recommend_applies_the_requested_limit_after_ranking() -> None:
@@ -97,8 +97,8 @@ def test_recommend_applies_the_requested_limit_after_ranking() -> None:
         service.recommend(RecommendRequest(faceShape=FaceShape.ROUND, limit=2))
     )
 
-    assert len(response.items) == 2
-    assert [item.id for item in response.items] == ["a", "b"]
+    assert len(response.data) == 2
+    assert [item.id for item in response.data] == ["a", "b"]
 
 
 def test_recommend_passes_optional_filters_through_to_the_product_client() -> None:
@@ -138,8 +138,8 @@ def test_recommend_over_fetches_from_the_client_even_when_no_limit_is_requested(
 @pytest.mark.parametrize(
     "error",
     [
-        ProductServiceTimeoutError("product-service không phản hồi kịp thời."),
-        ProductServiceUnavailableError("Không thể kết nối tới product-service."),
+        ProductServiceTimeoutError("product-service did not respond in time"),
+        ProductServiceUnavailableError("Could not connect to product-service"),
     ],
 )
 def test_recommend_propagates_product_service_errors_unchanged(error: Exception) -> None:

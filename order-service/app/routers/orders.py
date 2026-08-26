@@ -18,7 +18,7 @@ def checkout(
     session: Session = Depends(get_session),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.checkout(user_id, body), status_code=201)
+    return VNJSONResponse(content={"data": service.checkout(user_id, body)}, status_code=201)
 
 
 @router.get("/{user_id}/orders")
@@ -26,12 +26,13 @@ def list_orders(
     user_id: str,
     request: Request,
     status: str | None = Query(default=None),
-    page: int = Query(default=0),
-    size: int = Query(default=20),
+    page: int = Query(default=1),
+    page_size: int = Query(default=20, alias="pageSize"),
     session: Session = Depends(get_session),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.list_user_orders(user_id, status, page, size))
+    # already the {"data", "meta"} list envelope
+    return VNJSONResponse(content=service.list_user_orders(user_id, status, page, page_size))
 
 
 @router.get("/{user_id}/orders/{order_id}")
@@ -42,7 +43,7 @@ def get_order(
     session: Session = Depends(get_session),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.get_user_order(user_id, order_id))
+    return VNJSONResponse(content={"data": service.get_user_order(user_id, order_id)})
 
 
 @router.post("/{user_id}/orders/{order_id}/cancel")
@@ -54,4 +55,6 @@ def cancel_order(
     session: Session = Depends(get_session),
 ):
     service = make_order_service(request, session)
-    return VNJSONResponse(content=service.cancel_order(user_id, order_id, body))
+    return VNJSONResponse(
+        content={"data": service.cancel_order(user_id, order_id, body)}
+    )

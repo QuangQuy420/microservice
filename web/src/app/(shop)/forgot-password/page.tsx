@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { forgotPassword, ApiError } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { apiErrorDetails, forgotPassword, useApiError } from "@/lib/api";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,9 +25,14 @@ const SUBMIT_CLASS =
     "disabled:cursor-not-allowed disabled:opacity-[0.58] motion-reduce:transition-none";
 
 export default function ForgotPasswordPage() {
+    const t = useTranslations("auth");
+    const translateError = useApiError();
+
     const [email, setEmail] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] =
+        useState<Record<string, string[]>>({});
     const [message, setMessage] = useState("");
 
     async function handleSubmit(
@@ -35,37 +41,33 @@ export default function ForgotPasswordPage() {
         event.preventDefault();
 
         setError("");
+        setFieldErrors({});
         setMessage("");
 
         const normalizedEmail = email.trim();
 
         if (!normalizedEmail) {
-            setError("Vui lòng nhập email.");
+            setError(t("forgotPassword.errors.emailRequired"));
             return;
         }
 
         if (!EMAIL_PATTERN.test(normalizedEmail)) {
-            setError("Email không hợp lệ.");
+            setError(t("forgotPassword.errors.emailInvalid"));
             return;
         }
 
         setSubmitting(true);
 
         try {
-            const response = await forgotPassword({
+            // Resolves to null — the backend sends no success message, so the copy lives here.
+            await forgotPassword({
                 email: normalizedEmail,
             });
 
-            setMessage(
-                response.message ??
-                "Yêu cầu đặt lại mật khẩu đã được tiếp nhận.",
-            );
+            setMessage(t("forgotPassword.success"));
         } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Không thể gửi yêu cầu đặt lại mật khẩu.",
-            );
+            setError(translateError(err));
+            setFieldErrors(apiErrorDetails(err));
         } finally {
             setSubmitting(false);
         }
@@ -75,15 +77,15 @@ export default function ForgotPasswordPage() {
         <main className="mx-auto grid min-h-[calc(100vh-190px)] max-w-[1100px] place-items-center px-6 py-[clamp(2rem,6vw,4.5rem)] max-sm:px-4">
             <section className="w-[min(100%,450px)] rounded-[18px] border border-border bg-surface p-[clamp(1.4rem,4vw,2.25rem)] shadow-[0_22px_55px_rgba(43,36,32,0.09)]">
                 <p className="mb-[0.55rem] text-[0.76rem] font-bold tracking-[0.11em] text-accent-dark uppercase">
-                    Khôi phục tài khoản
+                    {t("forgotPassword.eyebrow")}
                 </p>
 
                 <h1 className="mb-[0.6rem] font-heading text-[clamp(1.7rem,4vw,2.25rem)] font-[650]">
-                    Quên mật khẩu
+                    {t("forgotPassword.title")}
                 </h1>
 
                 <p className="mb-6 text-[0.92rem] leading-[1.6] text-text-secondary">
-                    Nhập email đã đăng ký để nhận mã đặt lại mật khẩu.
+                    {t("forgotPassword.subtitle")}
                 </p>
 
                 <form
@@ -92,7 +94,7 @@ export default function ForgotPasswordPage() {
                     noValidate
                 >
                     <label htmlFor="forgot-password-email" className={LABEL_CLASS}>
-                        Email
+                        {t("forgotPassword.emailLabel")}
                         <input
                             id="forgot-password-email"
                             className={INPUT_CLASS}
@@ -104,12 +106,19 @@ export default function ForgotPasswordPage() {
                             autoComplete="email"
                             placeholder="example@gmail.com"
                         />
+
+                        {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+                        {fieldErrors.email?.map((msg) => (
+                            <span key={msg} className="field-error">
+                                {msg}
+                            </span>
+                        ))}
                     </label>
 
                     <button type="submit" className={SUBMIT_CLASS} disabled={submitting}>
                         {submitting
-                            ? "Đang gửi..."
-                            : "Gửi yêu cầu"}
+                            ? t("forgotPassword.submitting")
+                            : t("forgotPassword.submit")}
                     </button>
 
                     {message && (
@@ -125,7 +134,7 @@ export default function ForgotPasswordPage() {
 
                 <div className="mt-5 text-center text-[0.86rem] text-text-secondary">
                     <Link href="/login" className="font-bold no-underline hover:underline">
-                        Quay lại đăng nhập
+                        {t("forgotPassword.backToLogin")}
                     </Link>
                 </div>
             </section>

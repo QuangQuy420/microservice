@@ -2,6 +2,10 @@
 // swatch. `product-service` stores color as free text, so this is necessarily a partial map —
 // unmapped names fall back to a neutral swatch plus a visible text label (never a hex-only
 // circle with no accessible name for a color we don't recognize).
+//
+// The keys below are catalog DATA, not UI copy: they must match the Vietnamese colour values
+// product-service stores (the plan leaves product/brand data untranslated), so they stay as-is
+// and are the one deliberate exception to the "no Vietnamese outside messages/" rule.
 const COLOR_NAME_TO_HEX: Record<string, string> = {
   "đen": "#2B2420",
   "vàng": "#C9A24B",

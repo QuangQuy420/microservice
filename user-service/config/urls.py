@@ -1,30 +1,29 @@
 """Root URL configuration + JSON error handlers.
 
-Error handlers keep the ApiResponse envelope even for errors raised outside
+Error handlers keep the error envelope even for errors raised outside
 DRF views (unknown routes, malformed requests, middleware failures).
 """
 from django.http import JsonResponse
 from django.urls import include, path
 
-from users.errors import INTERNAL_SERVER_ERROR_MESSAGE
+from users.errors import ERROR_CATALOG
 
 
-def _envelope(message: str, status: int) -> JsonResponse:
-    return JsonResponse(
-        {"success": False, "message": message, "data": None}, status=status
-    )
+def _envelope(code: str) -> JsonResponse:
+    status, message = ERROR_CATALOG[code]
+    return JsonResponse({"error": {"code": code, "message": message}}, status=status)
 
 
 def handler400(request, exception=None):
-    return _envelope("Dữ liệu đầu vào không hợp lệ", 400)
+    return _envelope("MALFORMED_REQUEST")
 
 
 def handler404(request, exception=None):
-    return _envelope("Không tìm thấy tài nguyên", 404)
+    return _envelope("NOT_FOUND")
 
 
 def handler500(request):
-    return _envelope(INTERNAL_SERVER_ERROR_MESSAGE, 500)
+    return _envelope("INTERNAL_ERROR")
 
 
 urlpatterns = [

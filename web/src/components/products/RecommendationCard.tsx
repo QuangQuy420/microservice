@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { AddToCartModal } from "@/components/cart/AddToCartModal";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
-import { ApiError, getProductById } from "@/lib/api";
+import { getProductById, useApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatPriceVnd } from "@/lib/format/price";
-import { formatFrameShapeVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import type { Product } from "@/types/product";
 import type { RecommendedProduct } from "@/types/recommendation";
 
@@ -21,9 +22,9 @@ export type RecommendationCardVariant = "default" | "compact";
 interface RecommendationCardProps {
   product: RecommendedProduct;
   // Present only on the face-analysis page (RecommendationPreview → RecommendationGrid), where a
-  // second "Thử lên ảnh này" action draws the frame onto the already-uploaded static photo. In
-  // that context the primary action is "Thêm vào giỏ hàng" instead of the live-camera "Thử kính
-  // AR" — /recommendations (onTryOnPhoto absent) keeps the AR action instead.
+  // second "try on this photo" action draws the frame onto the already-uploaded static photo. In
+  // that context the primary action is "add to cart" instead of the live-camera "AR try-on" —
+  // /recommendations (onTryOnPhoto absent) keeps the AR action instead.
   onTryOnPhoto?: (product: RecommendedProduct) => void;
   variant?: RecommendationCardVariant;
 }
@@ -36,6 +37,10 @@ export function RecommendationCard({
   onTryOnPhoto,
   variant = "default",
 }: RecommendationCardProps) {
+  const t = useTranslations("recommendations");
+  const tCommon = useTranslations("common");
+  const labels = useLabels();
+  const translateError = useApiError();
   const thumbnail = product.images.find((image) => image.isThumbnail) ?? product.images[0];
   const isCompact = variant === "compact";
 
@@ -66,7 +71,7 @@ export function RecommendationCard({
       setFullProduct(fetched);
       setIsAddToCartOpen(true);
     } catch (err) {
-      setFetchError(err instanceof ApiError ? err.message : "Không thể tải thông tin sản phẩm.");
+      setFetchError(translateError(err));
     } finally {
       setIsFetchingProduct(false);
     }
@@ -113,7 +118,7 @@ export function RecommendationCard({
               isCompact ? "mb-1 text-[0.72rem]" : "mb-[0.6rem] text-[0.85rem]",
             )}
           >
-            {formatFrameShapeVi(product.frameShape)}
+            {labels.frameShape(product.frameShape)}
           </p>
           <p className={cn("font-semibold", isCompact ? "text-[0.82rem]" : "text-base")}>
             {formatPriceVnd(product.basePrice)}
@@ -133,7 +138,7 @@ export function RecommendationCard({
               className="btn btn-outline btn-small"
               onClick={() => onTryOnPhoto(product)}
             >
-              Thử lên ảnh này
+              {t("tryOnPhoto")}
             </button>
             <button
               type="button"
@@ -141,12 +146,12 @@ export function RecommendationCard({
               onClick={handleAddToCartClick}
               disabled={isFetchingProduct}
             >
-              {isFetchingProduct ? "Đang tải..." : "Thêm vào giỏ hàng"}
+              {isFetchingProduct ? tCommon("loading") : t("addToCart")}
             </button>
           </>
         ) : (
           <Link href={`/products/${product.id}/try-on`} className="btn btn-primary btn-small">
-            Thử kính AR
+            {t("tryOnAr")}
           </Link>
         )}
       </div>

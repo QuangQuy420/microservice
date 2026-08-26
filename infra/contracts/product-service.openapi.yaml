@@ -9,7 +9,19 @@ info:
     /products, POST /products/:id/images, full CRUD for /categories and /brands, and GET /health
     (admin product management pass, see .planning/2026-07-11-admin-product-management.md).
     Face shapes are stored as a product enum array; variant stock is stored on the variant.
-  version: "0.2.0"
+
+
+    **Response envelope (all services share it, see
+    .planning/2026-08-26-i18n-language-switch.md).** Every success body is
+    `{"data": ...}`; a paginated list adds a `meta` sibling
+    `{"page": 1-based, "pageSize", "total"}`; a 204 has no body. Every failure is
+    `{"error": {"code", "message", "details"?}}` where `code` is the stable
+    machine-readable contract, `message` is English developer-facing fallback text, and
+    `details` (validation only) is always `{"<field>": ["<msg>", ...]}`. `GET /health`
+    is the single exception and stays raw. Field validation answers **422**
+    `VALIDATION_ERROR`; **400** is reserved for broken requests (unparseable body,
+    malformed path UUID) with code `MALFORMED_REQUEST`.
+  version: "0.3.0"
 servers:
   - url: http://localhost:3002
     description: product-service, direct (local dev only)
@@ -35,7 +47,7 @@ paths:
       operationId: getHealth
       responses:
         "200":
-          description: Service is up
+          description: Service is up. Raw body — deliberately **not** enveloped (ops probe).
           content:
             application/json:
               schema:
@@ -114,8 +126,9 @@ paths:
             type: integer
             minimum: 1
             default: 1
-        - name: limit
+        - name: pageSize
           in: query
+          description: Renamed from `limit` when pagination was unified across services.
           schema:
             type: integer
             minimum: 1
@@ -128,8 +141,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaginatedProductResponse"
-        "400":
-          description: Invalid query parameters (validation failure)
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
     post:
       tags: [products]
@@ -152,11 +165,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
-        "400":
+                $ref: "#/components/schemas/ProductEnvelope"
+        "422":
           description: >
-            Validation failure, or `categoryId`/`brandId` does not reference an
-            existing row.
+            Validation failure (`VALIDATION_ERROR` + `details`), or `categoryId`/`brandId`
+            does not reference an existing row (`CATEGORY_NOT_FOUND` / `BRAND_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}:
     get:
@@ -176,9 +193,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
+                $ref: "#/components/schemas/ProductEnvelope"
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     patch:
       tags: [products]
@@ -206,13 +229,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductResponse"
+                $ref: "#/components/schemas/ProductEnvelope"
         "400":
-          description: >
-            Validation failure, or `categoryId`/`brandId` does not reference an
-            existing row.
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Validation failure (`VALIDATION_ERROR` + `details`), or `categoryId`/`brandId`
+            does not reference an existing row (`CATEGORY_NOT_FOUND` / `BRAND_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       tags: [products]
@@ -230,9 +263,15 @@ paths:
             format: uuid
       responses:
         "204":
-          description: Product soft-deleted
+          description: Product soft-deleted — no body (nothing useful to return)
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}/images:
     post:
@@ -276,14 +315,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductImageResponse"
+                $ref: "#/components/schemas/ProductImageEnvelope"
         "400":
-          description: >
-            Missing file, disallowed content type, file over 5 MB, `variantId` not
-            belonging to this product, or the group's image count limit (8 for the
-            product, 5 for a variant) already reached.
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Product not found
+          description: Product not found (`PRODUCT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Missing file (`FILE_REQUIRED`), disallowed content type
+            (`FILE_TYPE_INVALID`), file over 5 MB (`FILE_TOO_LARGE`), unknown
+            `variantId` (`VARIANT_NOT_FOUND`), `variantId` not belonging to this product
+            (`VARIANT_PRODUCT_MISMATCH`), or the group's image count limit (8 for the
+            product, 5 for a variant) already reached (`IMAGE_LIMIT_REACHED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /products/{id}/images/{imageId}:
     patch:
@@ -323,11 +374,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductImageResponse"
+                $ref: "#/components/schemas/ProductImageEnvelope"
         "400":
-          description: "`isThumbnail` was not `true`."
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Image not found, or it doesn't belong to this product.
+          description: Image not found, or it doesn't belong to this product (`IMAGE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: "`isThumbnail` was not `true` (`THUMBNAIL_FLAG_REQUIRED`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags: [products]
       summary: Delete a product or variant image (admin)
@@ -347,9 +408,15 @@ paths:
             format: uuid
       responses:
         "204":
-          description: Image deleted
+          description: Image deleted — no body
+        "400":
+          $ref: "#/components/responses/MalformedRequestError"
         "404":
-          description: Image not found, or it doesn't belong to this product.
+          description: Image not found, or it doesn't belong to this product (`IMAGE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /categories:
     get:
@@ -358,13 +425,13 @@ paths:
       operationId: listCategories
       responses:
         "200":
-          description: Public flat list of one-level categories. This remains an array, not a pagination envelope.
+          description: >
+            Public flat list of one-level categories. Unpaginated — `data` is a plain array
+            and there is no `meta` sibling.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/CategoryResponse"
+                $ref: "#/components/schemas/CategoryListEnvelope"
 
     post:
       tags: [categories]
@@ -385,8 +452,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CategoryResponse"
-        "400":
+                $ref: "#/components/schemas/CategoryEnvelope"
+        "422":
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
@@ -406,7 +473,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CategoryResponse"
+                $ref: "#/components/schemas/CategoryEnvelope"
         "404":
           $ref: "#/components/responses/NotFoundError"
 
@@ -431,8 +498,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CategoryResponse"
-        "400":
+                $ref: "#/components/schemas/CategoryEnvelope"
+        "422":
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
@@ -452,7 +519,7 @@ paths:
         - $ref: "#/components/parameters/ResourceId"
       responses:
         "204":
-          description: Category deleted
+          description: Category deleted — no body
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
@@ -469,13 +536,13 @@ paths:
       operationId: listBrands
       responses:
         "200":
-          description: Public flat list of brands. This remains an array, not a pagination envelope.
+          description: >
+            Public flat list of brands. Unpaginated — `data` is a plain array and there is
+            no `meta` sibling.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/BrandResponse"
+                $ref: "#/components/schemas/BrandListEnvelope"
 
     post:
       tags: [brands]
@@ -496,8 +563,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrandResponse"
-        "400":
+                $ref: "#/components/schemas/BrandEnvelope"
+        "422":
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
@@ -519,7 +586,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrandResponse"
+                $ref: "#/components/schemas/BrandEnvelope"
         "404":
           $ref: "#/components/responses/NotFoundError"
 
@@ -542,8 +609,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BrandResponse"
-        "400":
+                $ref: "#/components/schemas/BrandEnvelope"
+        "422":
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/UnauthorizedError"
@@ -565,7 +632,7 @@ paths:
         - $ref: "#/components/parameters/ResourceId"
       responses:
         "204":
-          description: Brand deleted
+          description: Brand deleted — no body
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
@@ -579,14 +646,95 @@ components:
   schemas:
     ErrorResponse:
       type: object
+      description: >
+        The shared error envelope. `code` is the stable machine-readable contract (clients
+        translate by it); `message` is English developer-facing fallback text; `details` is
+        present only on 422 validation failures and its values are ALWAYS arrays of strings.
+        See product-service/src/middlewares/http-exception.filter.ts.
       properties:
-        statusCode:
-          type: integer
-        message:
-          type: string
         error:
-          type: string
-      required: [statusCode, message]
+          type: object
+          properties:
+            code:
+              type: string
+              example: BRAND_IN_USE
+            message:
+              type: string
+              example: Cannot delete this brand because products still use it. Move or delete those products first.
+            details:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+              example:
+                name: ["name should not be empty"]
+          required: [code, message]
+      required: [error]
+
+    ProductEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductResponse"
+      required: [data]
+
+    ProductImageEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductImageResponse"
+      required: [data]
+
+    CategoryEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/CategoryResponse"
+      required: [data]
+
+    CategoryListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryResponse"
+      required: [data]
+
+    BrandEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/BrandResponse"
+      required: [data]
+
+    BrandListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BrandResponse"
+      required: [data]
+
+    PaginationMeta:
+      type: object
+      description: >
+        `meta` sibling of a paginated list envelope — identical across every service.
+        `page` is 1-based; there is no `totalPages` (the client derives it).
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 128
+      required: [page, pageSize, total]
 
     FrameShape:
       type: string
@@ -916,22 +1064,17 @@ components:
     PaginatedProductResponse:
       type: object
       description: >
-        Flat pagination envelope (NOT a nested data/meta shape) — see
-        product-service/src/routes/dto/paginated-response.dto.ts.
+        The shared list envelope: `data` holds the page's items, `meta` the paging figures.
+        Built from `PaginatedResponseDto` and flattened by
+        product-service/src/middlewares/transform.interceptor.ts.
       properties:
-        items:
+        data:
           type: array
           items:
             $ref: "#/components/schemas/ProductResponse"
-        total:
-          type: integer
-        page:
-          type: integer
-        limit:
-          type: integer
-        totalPages:
-          type: integer
-      required: [items, total, page, limit, totalPages]
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+      required: [data, meta]
 
   parameters:
     ResourceId:
@@ -943,44 +1086,62 @@ components:
         format: uuid
 
   responses:
+    MalformedRequestError:
+      description: >
+        Broken request — a path parameter that is not a UUID (`ParseUUIDPipe`) or an
+        unparseable JSON body. Code `MALFORMED_REQUEST`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
-      description: Dữ liệu gửi lên không hợp lệ.
+      description: >
+        Well-formed request that fails a field rule. Code `VALIDATION_ERROR`, with
+        `details` = `{"<field>": ["<message>", ...]}`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     UnauthorizedError:
-      description: Cần đăng nhập để thực hiện thao tác này.
+      description: >
+        Authentication required. Raised by api-gateway, not by product-service —
+        codes `MISSING_TOKEN` / `INVALID_TOKEN`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     ForbiddenError:
-      description: Bạn không có quyền quản lý danh mục.
+      description: >
+        Authenticated but missing the `catalog:manage` permission. Raised by
+        api-gateway — code `FORBIDDEN`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     NotFoundError:
-      description: Không tìm thấy thương hiệu hoặc danh mục.
+      description: >
+        Brand or category not found — code `BRAND_NOT_FOUND` or `CATEGORY_NOT_FOUND`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     BrandNameConflictError:
-      description: Tên thương hiệu đã tồn tại.
+      description: Brand name already taken — code `BRAND_NAME_TAKEN`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     BrandInUseError:
-      description: Không thể xoá thương hiệu vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.
+      description: >
+        The brand still has products; move or delete them first — code `BRAND_IN_USE`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     CategoryInUseError:
-      description: Không thể xoá danh mục vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.
+      description: >
+        The category still has products; move or delete them first — code
+        `CATEGORY_IN_USE`.
       content:
         application/json:
           schema:

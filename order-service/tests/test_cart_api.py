@@ -18,7 +18,7 @@ class TestGetCart:
     def test_empty_cart_returns_200_and_is_not_persisted(self, client, redis_client):
         res = client.get(f"/api/v1/carts/{USER}")
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert body["userId"] == USER
         assert body["items"] == []
         assert body["totalQuantity"] == 0
@@ -34,7 +34,7 @@ class TestAddItem:
 
         res = _add(client, product, variant, quantity=2)
         assert res.status_code == 201
-        body = res.json()
+        body = res.json()["data"]
         assert body["totalQuantity"] == 2
         assert body["totalAmount"] == 240000.00
         item = body["items"][0]
@@ -60,8 +60,8 @@ class TestAddItem:
         _add(client, product, variant, quantity=2)
         res = _add(client, product, variant, quantity=3)
         assert res.status_code == 201
-        assert res.json()["items"][0]["quantity"] == 5
-        assert res.json()["totalQuantity"] == 5
+        assert res.json()["data"]["items"][0]["quantity"] == 5
+        assert res.json()["data"]["totalQuantity"] == 5
 
     def test_merge_refreshes_snapshot_price(self, client, product_client):
         variant = make_variant(stock=10)
@@ -71,7 +71,7 @@ class TestAddItem:
         # price change between adds → snapshot refreshed
         product["basePrice"] = product["basePrice"] * 2
         res = _add(client, product, variant, quantity=1)
-        assert res.json()["items"][0]["unitPrice"] == 200000.00
+        assert res.json()["data"]["items"][0]["unitPrice"] == 200000.00
 
     def test_product_not_published(self, client, product_client):
         variant = make_variant()
@@ -79,7 +79,10 @@ class TestAddItem:
         product_client.register(product)
         res = _add(client, product, variant)
         assert res.status_code == 400
-        assert res.json()["message"] == "Sản phẩm hiện không được phép đặt mua"
+        assert res.json()["error"] == {
+            "code": "PRODUCT_NOT_PURCHASABLE",
+            "message": "Product is not available for purchase",
+        }
 
     def test_product_without_price(self, client, product_client):
         variant = make_variant()
@@ -87,7 +90,7 @@ class TestAddItem:
         product_client.register(product)
         res = _add(client, product, variant)
         assert res.status_code == 400
-        assert res.json()["message"] == "Sản phẩm chưa có giá bán"
+        assert res.json()["error"]["code"] == "PRODUCT_NO_PRICE"
 
     def test_product_negative_price(self, client, product_client):
         variant = make_variant()
@@ -95,14 +98,17 @@ class TestAddItem:
         product_client.register(product)
         res = _add(client, product, variant)
         assert res.status_code == 400
-        assert res.json()["message"] == "Giá sản phẩm không hợp lệ"
+        assert res.json()["error"]["code"] == "PRODUCT_INVALID_PRICE"
 
     def test_product_not_found(self, client, product_client):
         product = make_product()
         variant = product["variants"][0]
         res = _add(client, product, variant)  # never registered
         assert res.status_code == 404
-        assert res.json()["message"] == f"Không tìm thấy sản phẩm: {product['id']}"
+        assert res.json()["error"] == {
+            "code": "PRODUCT_NOT_FOUND",
+            "message": f"Product not found: {product['id']}",
+        }
 
     def test_product_without_variants(self, client, product_client):
         product = make_product(variants=[])
@@ -112,7 +118,7 @@ class TestAddItem:
             json={"productId": product["id"], "variantId": str(uuid.uuid4()), "quantity": 1},
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Sản phẩm không có biến thể"
+        assert res.json()["error"]["code"] == "PRODUCT_NO_VARIANTS"
 
     def test_variant_not_found(self, client, product_client):
         product = make_product(variants=[make_variant()])
@@ -122,7 +128,7 @@ class TestAddItem:
             json={"productId": product["id"], "variantId": str(uuid.uuid4()), "quantity": 1},
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Không tìm thấy biến thể sản phẩm"
+        assert res.json()["error"]["code"] == "VARIANT_NOT_FOUND"
 
     def test_quantity_above_stock(self, client, product_client):
         variant = make_variant(stock=5)
@@ -130,7 +136,10 @@ class TestAddItem:
         product_client.register(product)
         res = _add(client, product, variant, quantity=6)
         assert res.status_code == 400
-        assert res.json()["message"] == "Chỉ còn 5 sản phẩm trong kho"
+        assert res.json()["error"] == {
+            "code": "INSUFFICIENT_STOCK",
+            "message": "Only 5 item(s) left in stock",
+        }
 
     def test_merged_quantity_above_stock(self, client, product_client):
         variant = make_variant(stock=5)
@@ -139,7 +148,7 @@ class TestAddItem:
         _add(client, product, variant, quantity=4)
         res = _add(client, product, variant, quantity=2)
         assert res.status_code == 400
-        assert res.json()["message"] == "Chỉ còn 5 sản phẩm trong kho"
+        assert res.json()["error"]["code"] == "INSUFFICIENT_STOCK"
 
     def test_merged_quantity_above_99(self, client, product_client):
         variant = make_variant(stock=200)
@@ -148,16 +157,20 @@ class TestAddItem:
         _add(client, product, variant, quantity=98)
         res = _add(client, product, variant, quantity=2)
         assert res.status_code == 400
-        assert res.json()["message"] == "Số lượng sản phẩm phải từ 1 đến 99"
+        assert res.json()["error"] == {
+            "code": "QUANTITY_OUT_OF_BOUNDS",
+            "message": "Quantity must be between 1 and 99",
+        }
 
     def test_quantity_zero_fails_validation(self, client, product_client):
         variant = make_variant()
         product = make_product(variants=[variant])
         product_client.register(product)
         res = _add(client, product, variant, quantity=0)
-        assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
-        assert res.json()["validationErrors"]["quantity"] == "Số lượng sản phẩm phải từ 1 đến 99"
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert error["details"]["quantity"] == ["Quantity must be between 1 and 99"]
 
 
 class TestImagePriorityChain:
@@ -169,7 +182,7 @@ class TestImagePriorityChain:
         product_client.register(product)
         res = _add(client, product, variant)
         assert res.status_code == 201
-        return res.json()["items"][0]["productImageUrl"]
+        return res.json()["data"]["items"][0]["productImageUrl"]
 
     def test_step1_variant_thumbnail_wins(self, client, product_client):
         variant = make_variant()
@@ -228,7 +241,10 @@ class TestUpdateItem:
             f"/api/v1/carts/{USER}/items/{uuid.uuid4()}", json={"quantity": 2}
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Giỏ hàng không tồn tại hoặc đang trống"
+        assert res.json()["error"] == {
+            "code": "CART_EMPTY",
+            "message": "Cart does not exist or is empty",
+        }
 
     def test_update_variant_not_in_cart(self, client, product_client):
         variant = make_variant()
@@ -239,7 +255,7 @@ class TestUpdateItem:
             f"/api/v1/carts/{USER}/items/{uuid.uuid4()}", json={"quantity": 2}
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Biến thể sản phẩm không tồn tại trong giỏ hàng"
+        assert res.json()["error"]["code"] == "CART_VARIANT_NOT_FOUND"
 
     def test_update_sets_absolute_quantity(self, client, product_client):
         variant = make_variant(stock=10)
@@ -250,7 +266,7 @@ class TestUpdateItem:
             f"/api/v1/carts/{USER}/items/{variant['id']}", json={"quantity": 2}
         )
         assert res.status_code == 200
-        assert res.json()["items"][0]["quantity"] == 2
+        assert res.json()["data"]["items"][0]["quantity"] == 2
 
     def test_update_revalidates_stock(self, client, product_client):
         variant = make_variant(stock=3)
@@ -261,7 +277,7 @@ class TestUpdateItem:
             f"/api/v1/carts/{USER}/items/{variant['id']}", json={"quantity": 4}
         )
         assert res.status_code == 400
-        assert res.json()["message"] == "Chỉ còn 3 sản phẩm trong kho"
+        assert res.json()["error"]["message"] == "Only 3 item(s) left in stock"
 
     def test_update_refreshes_snapshot(self, client, product_client):
         variant = make_variant(stock=10)
@@ -272,7 +288,7 @@ class TestUpdateItem:
         res = client.put(
             f"/api/v1/carts/{USER}/items/{variant['id']}", json={"quantity": 1}
         )
-        assert res.json()["items"][0]["unitPrice"] == 150000.00
+        assert res.json()["data"]["items"][0]["unitPrice"] == 150000.00
 
 
 class TestRemoveItem:
@@ -284,7 +300,7 @@ class TestRemoveItem:
         _add(client, product, v2)
         res = client.delete(f"/api/v1/carts/{USER}/items/{v1['id']}")
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert len(body["items"]) == 1
         assert body["items"][0]["variantId"] == v2["id"]
 
@@ -295,7 +311,7 @@ class TestRemoveItem:
         _add(client, product, variant)
         res = client.delete(f"/api/v1/carts/{USER}/items/{variant['id']}")
         assert res.status_code == 200
-        assert res.json()["items"] == []
+        assert res.json()["data"]["items"] == []
         assert redis_client.get(f"cart:{USER}") is None
 
 

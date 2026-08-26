@@ -1,4 +1,3 @@
-import type { ApiResponse } from "@/types/auth";
 import type {
     Address,
     ChangePasswordRequest,
@@ -14,10 +13,8 @@ function authHeaders(token: string): HeadersInit {
     };
 }
 
-export function getMyProfile(
-    token: string,
-): Promise<ApiResponse<UserProfile>> {
-    return apiFetch<ApiResponse<UserProfile>>("/users/me", {
+export function getMyProfile(token: string): Promise<UserProfile> {
+    return apiFetch<UserProfile>("/users/me", {
         method: "GET",
         headers: authHeaders(token),
     });
@@ -26,8 +23,8 @@ export function getMyProfile(
 export function updateMyProfile(
     token: string,
     payload: UpdateProfileRequest,
-): Promise<ApiResponse<UserProfile>> {
-    return apiFetch<ApiResponse<UserProfile>>("/users/me", {
+): Promise<UserProfile> {
+    return apiFetch<UserProfile>("/users/me", {
         method: "PUT",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
@@ -37,18 +34,16 @@ export function updateMyProfile(
 export function changePassword(
     token: string,
     payload: ChangePasswordRequest,
-): Promise<ApiResponse<unknown>> {
-    return apiFetch<ApiResponse<unknown>>("/users/change-password", {
+): Promise<null> {
+    return apiFetch<null>("/users/change-password", {
         method: "PUT",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
     });
 }
 
-export function getMyAddresses(
-    token: string,
-): Promise<ApiResponse<Address[]>> {
-    return apiFetch<ApiResponse<Address[]>>("/users/me/addresses", {
+export function getMyAddresses(token: string): Promise<Address[]> {
+    return apiFetch<Address[]>("/users/me/addresses", {
         method: "GET",
         headers: authHeaders(token),
     });
@@ -57,8 +52,8 @@ export function getMyAddresses(
 export function createMyAddress(
     token: string,
     payload: CreateAddressRequest,
-): Promise<ApiResponse<Address>> {
-    return apiFetch<ApiResponse<Address>>("/users/me/addresses", {
+): Promise<Address> {
+    return apiFetch<Address>("/users/me/addresses", {
         method: "POST",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
@@ -69,8 +64,8 @@ export function updateMyAddress(
     token: string,
     addressId: string,
     payload: CreateAddressRequest,
-): Promise<ApiResponse<Address>> {
-    return apiFetch<ApiResponse<Address>>(`/users/me/addresses/${addressId}`, {
+): Promise<Address> {
+    return apiFetch<Address>(`/users/me/addresses/${addressId}`, {
         method: "PUT",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
@@ -80,8 +75,8 @@ export function updateMyAddress(
 export function deleteMyAddress(
     token: string,
     addressId: string,
-): Promise<ApiResponse<unknown>> {
-    return apiFetch<ApiResponse<unknown>>(`/users/me/addresses/${addressId}`, {
+): Promise<null> {
+    return apiFetch<null>(`/users/me/addresses/${addressId}`, {
         method: "DELETE",
         headers: authHeaders(token),
     });

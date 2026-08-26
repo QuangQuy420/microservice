@@ -1,4 +1,4 @@
-"""Central DRF exception handler producing the ApiResponse envelope for ALL
+"""Central DRF exception handler producing the error envelope for ALL
 errors — business errors (ApiError), auth failures, permission failures,
 validation errors and unexpected exceptions."""
 import logging
@@ -7,69 +7,62 @@ from django.http import Http404
 from rest_framework import exceptions as drf_exceptions
 from rest_framework.response import Response
 
-from .errors import (
-    ERROR_CATALOG,
-    INTERNAL_SERVER_ERROR_MESSAGE,
-    VALIDATION_FAILED_MESSAGE,
-    ApiError,
-)
+from .errors import ERROR_CATALOG, ApiError
+from .responses import error_response
 
 logger = logging.getLogger(__name__)
 
 
-def _envelope(message: str, data=None, status: int = 400) -> Response:
-    return Response({"success": False, "message": message, "data": data}, status=status)
+def _catalog_error(code: str, details=None) -> Response:
+    status, message = ERROR_CATALOG[code]
+    return error_response(code, message, details, status)
 
 
-def _first_message(detail) -> str:
-    """Reduce a DRF error detail (list/dict/str) to its first message."""
+def _message_list(detail) -> list[str]:
+    """Flatten a DRF error detail (list/dict/str) into a list of strings."""
     if isinstance(detail, (list, tuple)):
-        return _first_message(detail[0]) if detail else ""
+        return [message for item in detail for message in _message_list(item)]
     if isinstance(detail, dict):
-        for value in detail.values():
-            return _first_message(value)
-        return ""
-    return str(detail)
+        return [message for value in detail.values() for message in _message_list(value)]
+    return [str(detail)]
 
 
-def _validation_data(detail) -> dict:
-    """Map DRF validation detail to {"<field>": "<first message>"}."""
+def _validation_details(detail) -> dict:
+    """Map DRF validation detail to {"<field>": ["<message>", ...]}."""
     if isinstance(detail, dict):
-        return {str(field): _first_message(messages) for field, messages in detail.items()}
-    return {"non_field_errors": _first_message(detail)}
+        return {str(field): _message_list(messages) for field, messages in detail.items()}
+    return {"non_field_errors": _message_list(detail)}
 
 
 def api_exception_handler(exc, context) -> Response:
     if isinstance(exc, ApiError):
-        return _envelope(exc.message, None, exc.http_status)
+        return error_response(exc.code, exc.message, None, exc.http_status)
 
     if isinstance(exc, drf_exceptions.ValidationError):
-        return _envelope(VALIDATION_FAILED_MESSAGE, _validation_data(exc.detail), 400)
+        return _catalog_error("VALIDATION_ERROR", _validation_details(exc.detail))
 
     if isinstance(
         exc, (drf_exceptions.NotAuthenticated, drf_exceptions.AuthenticationFailed)
     ):
-        status, message = ERROR_CATALOG["INVALID_TOKEN"]
-        return _envelope(message, None, status)
+        return _catalog_error("INVALID_TOKEN")
 
     if isinstance(exc, drf_exceptions.PermissionDenied):
-        status, message = ERROR_CATALOG["FORBIDDEN"]
-        return _envelope(message, None, status)
+        return _catalog_error("FORBIDDEN")
 
     if isinstance(exc, drf_exceptions.ParseError):
-        return _envelope(VALIDATION_FAILED_MESSAGE, None, 400)
+        return _catalog_error("MALFORMED_REQUEST")
 
     if isinstance(exc, (Http404, drf_exceptions.NotFound)):
-        return _envelope("Không tìm thấy tài nguyên", None, 404)
+        return _catalog_error("NOT_FOUND")
 
     if isinstance(exc, drf_exceptions.MethodNotAllowed):
-        return _envelope("Phương thức không được hỗ trợ", None, 405)
+        return _catalog_error("METHOD_NOT_ALLOWED")
 
     if isinstance(exc, drf_exceptions.UnsupportedMediaType):
-        return _envelope(VALIDATION_FAILED_MESSAGE, None, 415)
+        return _catalog_error("UNSUPPORTED_MEDIA_TYPE")
 
     if isinstance(exc, drf_exceptions.Throttled):
-        return _envelope("Quá nhiều yêu cầu", None, 429)
+        return _catalog_error("THROTTLED")
 
     logger.exception("Unhandled error while processing request", exc_info=exc)
-    return _envelope(INTERNAL_SERVER_ERROR_MESSAGE, None, 500)
+    return _catalog_error("INTERNAL_ERROR")

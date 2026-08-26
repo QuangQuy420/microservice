@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, addCartItem } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { addCartItem, useApiError } from "@/lib/api";
 import { dispatchCartChange } from "@/hooks/useCart";
 import { useProduct } from "@/hooks/useProduct";
 import { getAccessToken } from "@/lib/auth/session";
@@ -42,6 +43,9 @@ function sizesFor(product: Product, color: string): string[] {
 }
 
 export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
+  const t = useTranslations("cart.addModal");
+  const tCommon = useTranslations("common");
+  const translateError = useApiError();
   const colors = [...new Set(product.variants.map((variant) => variant.color))];
 
   // A product with only one color (or, once a color is picked, only one size) has nothing to
@@ -112,28 +116,28 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
 
   async function handleConfirm() {
     if (!selectedColor || !selectedSize) {
-      setValidationError("Vui lòng chọn màu sắc và kích thước trước khi thêm vào giỏ hàng.");
+      setValidationError(t("errorSelectColorAndSize"));
       return;
     }
 
     if (!selectedVariant) {
-      setValidationError("Không tìm thấy phiên bản sản phẩm phù hợp. Vui lòng chọn lại.");
+      setValidationError(t("errorVariantNotFound"));
       return;
     }
 
     if (isCheckingStock) {
-      setValidationError("Đang kiểm tra tồn kho, vui lòng đợi trong giây lát.");
+      setValidationError(t("errorCheckingStock"));
       return;
     }
 
     if (isOutOfStock) {
-      setValidationError("Phiên bản này đã hết hàng, vui lòng chọn phiên bản khác.");
+      setValidationError(t("errorOutOfStock"));
       return;
     }
 
     const token = getAccessToken();
     if (!token) {
-      setSubmitError("Bạn cần đăng nhập để thêm sản phẩm vào giỏ hàng.");
+      setSubmitError(t("errorLoginRequired"));
       return;
     }
 
@@ -148,7 +152,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
       dispatchCartChange();
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : "Không thể thêm vào giỏ hàng.");
+      setSubmitError(translateError(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -169,13 +173,13 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
       >
         <div className="mb-3 flex items-center justify-between gap-4">
           <h2 id="add-to-cart-heading" className="font-heading text-[1.3rem] text-text">
-            Thêm vào giỏ hàng
+            {t("title")}
           </h2>
           <button
             type="button"
             className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[1.4rem] leading-none text-text-muted hover:bg-[rgba(43,36,32,0.06)] hover:text-text"
             onClick={onClose}
-            aria-label="Đóng"
+            aria-label={tCommon("close")}
           >
             ×
           </button>
@@ -183,10 +187,10 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
 
         <p className="mb-5 text-[0.95rem] font-semibold text-text-secondary">{product.name}</p>
 
-        <section aria-label="Chọn màu sắc" className="mb-5">
-          <p className={MODAL_SECTION_LABEL}>Màu gọng kính</p>
+        <section aria-label={t("colorSectionAria")} className="mb-5">
+          <p className={MODAL_SECTION_LABEL}>{t("colorLabel")}</p>
           {colors.length === 0 ? (
-            <p className="my-[1em]">Chưa có phiên bản màu nào.</p>
+            <p className="my-[1em]">{t("noColors")}</p>
           ) : (
             <ul className="mb-6 flex flex-wrap gap-3">
               {colors.map((color) => {
@@ -216,8 +220,8 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
         </section>
 
         {selectedColor && (
-          <section aria-label="Chọn kích thước" className="mb-5">
-            <p className={MODAL_SECTION_LABEL}>Kích thước</p>
+          <section aria-label={t("sizeSectionAria")} className="mb-5">
+            <p className={MODAL_SECTION_LABEL}>{t("sizeLabel")}</p>
             <ul className="flex flex-wrap gap-2">
               {sizesForColor.map((size) => (
                 <li key={size}>
@@ -238,15 +242,15 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
           </section>
         )}
 
-        <section aria-label="Số lượng" className="mb-5">
-          <p className={MODAL_SECTION_LABEL}>Số lượng</p>
+        <section aria-label={t("quantityLabel")} className="mb-5">
+          <p className={MODAL_SECTION_LABEL}>{t("quantityLabel")}</p>
           <div className="inline-flex items-center overflow-hidden rounded-[10px] border border-border bg-[#fffdf9]">
             <button
               type="button"
               className={STEPPER_BUTTON}
               onClick={() => handleStepQuantity(-1)}
               disabled={clampedQuantity <= MIN_ITEM_QUANTITY}
-              aria-label="Giảm số lượng"
+              aria-label={t("decreaseQuantityAria")}
             >
               −
             </button>
@@ -261,14 +265,14 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
               className={STEPPER_BUTTON}
               onClick={() => handleStepQuantity(1)}
               disabled={clampedQuantity >= maxQuantity}
-              aria-label="Tăng số lượng"
+              aria-label={t("increaseQuantityAria")}
             >
               +
             </button>
           </div>
 
           {selectedVariant && isCheckingStock && (
-            <p className="mt-[0.6rem] text-[0.82rem] text-text-muted">Đang kiểm tra tồn kho...</p>
+            <p className="mt-[0.6rem] text-[0.82rem] text-text-muted">{t("checkingStock")}</p>
           )}
           {selectedVariant && !isCheckingStock && stockCheckError && (
             <p role="alert" className="my-[1em] text-[#a92828]">
@@ -282,7 +286,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
                 isOutOfStock ? "text-[#a92828]" : "mt-[0.6rem] text-[0.82rem] text-text-muted",
               )}
             >
-              {isOutOfStock ? "Chỉ còn 0 sản phẩm trong kho" : `Còn ${stock} sản phẩm trong kho`}
+              {isOutOfStock ? t("outOfStock") : t("stockLeft", { count: stock })}
             </p>
           )}
         </section>
@@ -305,7 +309,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
             onClick={onClose}
             disabled={isSubmitting}
           >
-            Hủy
+            {tCommon("cancel")}
           </button>
           <button
             type="button"
@@ -313,7 +317,7 @@ export function AddToCartModal({ product, onClose }: AddToCartModalProps) {
             onClick={handleConfirm}
             disabled={isSubmitting || Boolean(selectedVariant && (isCheckingStock || isOutOfStock))}
           >
-            {isSubmitting ? "Đang thêm..." : "Thêm vào giỏ hàng"}
+            {isSubmitting ? t("submitting") : t("submit")}
           </button>
         </div>
       </div>

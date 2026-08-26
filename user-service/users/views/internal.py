@@ -1,7 +1,8 @@
 """Internal service-to-service endpoints (gated by InternalKeyMiddleware)."""
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..responses import ok
+from ..responses import data_response
 from .helpers import get_user_or_404
 
 
@@ -13,10 +14,7 @@ class InternalUserPermissionsView(APIView):
 
     def get(self, request, user_id):
         user = get_user_or_404(user_id)
-        return ok(
-            "Lấy danh sách quyền của người dùng thành công",
-            {"permissions": user.permission_codes()},
-        )
+        return data_response({"permissions": user.permission_codes()})
 
 
 class HealthView(APIView):
@@ -24,4 +22,5 @@ class HealthView(APIView):
     permission_classes = []
 
     def get(self, request):
-        return ok("OK", {"status": "UP"})
+        # Health stays raw (no envelope) — it is an ops probe, not an API.
+        return Response({"status": "UP"})

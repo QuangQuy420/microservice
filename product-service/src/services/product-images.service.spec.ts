@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { UnprocessableEntityException } from '@nestjs/common';
 import { ProductImagesService } from './product-images.service';
 import { IProductVariantRepository } from '../repositories/product-variant.repository';
 import { IProductImageRepository } from '../repositories/product-image.repository';
@@ -89,7 +89,7 @@ describe('ProductImagesService', () => {
           variantId: 'missing-variant',
           imageUrl: 'https://example.test/a.jpg',
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
       expect(imageRepository.create).not.toHaveBeenCalled();
     });
 
@@ -105,7 +105,7 @@ describe('ProductImagesService', () => {
           variantId: 'variant-1',
           imageUrl: 'https://example.test/a.jpg',
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
       expect(imageRepository.create).not.toHaveBeenCalled();
     });
   });

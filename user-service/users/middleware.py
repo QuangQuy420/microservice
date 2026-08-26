@@ -1,15 +1,15 @@
 """Gate for /internal/** service-to-service routes.
 
 The X-Internal-Key header must equal INTERNAL_API_KEY exactly, otherwise the
-request is rejected with 403 and the exact envelope from the spec — before it
-reaches any view.
+request is rejected with 403 INVALID_INTERNAL_KEY in the error envelope —
+before it reaches any view.
 """
 import hmac
 
 from django.conf import settings
 from django.http import JsonResponse
 
-from .errors import INTERNAL_KEY_INVALID_MESSAGE
+from .errors import ERROR_CATALOG
 
 
 class InternalKeyMiddleware:
@@ -20,12 +20,14 @@ class InternalKeyMiddleware:
         if request.path.startswith("/internal/"):
             provided = request.headers.get("X-Internal-Key", "")
             if not hmac.compare_digest(provided, settings.INTERNAL_API_KEY):
+                status, message = ERROR_CATALOG["INVALID_INTERNAL_KEY"]
                 return JsonResponse(
                     {
-                        "success": False,
-                        "message": INTERNAL_KEY_INVALID_MESSAGE,
-                        "data": None,
+                        "error": {
+                            "code": "INVALID_INTERNAL_KEY",
+                            "message": message,
+                        }
                     },
-                    status=403,
+                    status=status,
                 )
         return self.get_response(request)

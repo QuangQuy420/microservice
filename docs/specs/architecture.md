@@ -105,7 +105,7 @@ dependency injection. See the root `README.md` for the full diagram and SOLID no
 
 ## Conventions
 
-- All user-facing messages are Vietnamese (clients assert on them — keep byte-identical).
+- All backend-authored text (HTTP error messages, gateway messages, saga event `reason` strings, seed display labels) is **English** and developer-facing. Every service answers with the shared envelope — `{"data": ...}` / `{"data": [...], "meta": {page, pageSize, total}}` / `{"error": {"code", "message", "details"?}}` — and `error.code` is the stable contract. `web` translates by code and owns all user-facing copy (VI/EN); the English `error.message` is only its fallback for an unknown code. Health endpoints stay raw.
 - Scope is local-only: no k8s, no cloud, no HTTPS. "Deploy" = `docker compose up`.
 - Catalog seeding is manual: `infra/seed/products.json` via product-service seed script.
 

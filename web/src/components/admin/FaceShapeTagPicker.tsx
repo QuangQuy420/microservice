@@ -1,5 +1,8 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/cn";
-import { FACE_SHAPE_TAGS, formatFaceShapeVi } from "@/lib/labels";
+import { FACE_SHAPE_TAGS, useLabels } from "@/lib/labels";
 import type { FaceShapeTag } from "@/types/product";
 
 const TAG =
@@ -13,13 +16,16 @@ interface FaceShapeTagPickerProps {
 // Toggle-style buttons over all 6 FaceShape values (T19/T21 Q2 — mockup only shows 5, the real
 // picker shows all 6 for consistency with the backend enum).
 export function FaceShapeTagPicker({ selected, onChange }: FaceShapeTagPickerProps) {
+  const t = useTranslations("admin");
+  const labels = useLabels();
+
   function toggle(tag: FaceShapeTag) {
     const isSelected = selected.includes(tag);
     onChange(isSelected ? selected.filter((t) => t !== tag) : [...selected, tag]);
   }
 
   return (
-    <div className="flex flex-wrap gap-2.5" role="group" aria-label="Phù hợp với dáng mặt">
+    <div className="flex flex-wrap gap-2.5" role="group" aria-label={t("faceShapes.groupLabel")}>
       {FACE_SHAPE_TAGS.map((tag) => {
         const isSelected = selected.includes(tag);
         return (
@@ -35,7 +41,7 @@ export function FaceShapeTagPicker({ selected, onChange }: FaceShapeTagPickerPro
             aria-pressed={isSelected}
             onClick={() => toggle(tag)}
           >
-            {formatFaceShapeVi(tag)}
+            {labels.faceShape(tag)}
           </button>
         );
       })}

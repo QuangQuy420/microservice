@@ -12,6 +12,10 @@ import { CreateBrandDto } from '../routes/dto/create-brand.dto';
 import { BrandResponseDto } from '../routes/dto/brand-response.dto';
 import { UpdateBrandDto } from '../routes/dto/update-brand.dto';
 
+/** Raised both by the pre-check and by the FK violation the same delete can race into. */
+const BRAND_IN_USE_MESSAGE =
+  'Cannot delete this brand because products still use it. Move or delete those products first.';
+
 @Injectable()
 export class BrandsService {
   constructor(
@@ -27,7 +31,10 @@ export class BrandsService {
   async findOne(id: string): Promise<BrandResponseDto> {
     const brand = await this.brandRepository.findById(id);
     if (!brand) {
-      throw new NotFoundException('Không tìm thấy thương hiệu.');
+      throw new NotFoundException({
+        code: 'BRAND_NOT_FOUND',
+        message: 'Brand not found',
+      });
     }
     return this.toResponseDto(brand);
   }
@@ -45,7 +52,10 @@ export class BrandsService {
       return this.toResponseDto(brand);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
-        throw new ConflictException('Tên thương hiệu đã tồn tại.');
+        throw new ConflictException({
+          code: 'BRAND_NAME_TAKEN',
+          message: 'Brand name already exists',
+        });
       }
       throw error;
     }
@@ -54,7 +64,10 @@ export class BrandsService {
   async update(id: string, dto: UpdateBrandDto): Promise<BrandResponseDto> {
     const existing = await this.brandRepository.findById(id);
     if (!existing) {
-      throw new NotFoundException('Không tìm thấy thương hiệu.');
+      throw new NotFoundException({
+        code: 'BRAND_NOT_FOUND',
+        message: 'Brand not found',
+      });
     }
 
     const name = dto.name?.trim();
@@ -71,12 +84,18 @@ export class BrandsService {
           : {}),
       });
       if (!brand) {
-        throw new NotFoundException('Không tìm thấy thương hiệu.');
+        throw new NotFoundException({
+          code: 'BRAND_NOT_FOUND',
+          message: 'Brand not found',
+        });
       }
       return this.toResponseDto(brand);
     } catch (error) {
       if (this.isUniqueViolation(error)) {
-        throw new ConflictException('Tên thương hiệu đã tồn tại.');
+        throw new ConflictException({
+          code: 'BRAND_NAME_TAKEN',
+          message: 'Brand name already exists',
+        });
       }
       throw error;
     }
@@ -85,22 +104,27 @@ export class BrandsService {
   async remove(id: string): Promise<void> {
     const brand = await this.brandRepository.findById(id);
     if (!brand) {
-      throw new NotFoundException('Không tìm thấy thương hiệu.');
+      throw new NotFoundException({
+        code: 'BRAND_NOT_FOUND',
+        message: 'Brand not found',
+      });
     }
 
     if (await this.brandRepository.countProducts(id)) {
-      throw new ConflictException(
-        'Không thể xoá thương hiệu vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.',
-      );
+      throw new ConflictException({
+        code: 'BRAND_IN_USE',
+        message: BRAND_IN_USE_MESSAGE,
+      });
     }
 
     try {
       await this.brandRepository.delete(id);
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
-        throw new ConflictException(
-          'Không thể xoá thương hiệu vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.',
-        );
+        throw new ConflictException({
+          code: 'BRAND_IN_USE',
+          message: BRAND_IN_USE_MESSAGE,
+        });
       }
       throw error;
     }
@@ -111,7 +135,10 @@ export class BrandsService {
       this.toNameKey(name),
     );
     if (existing && existing.id !== id) {
-      throw new ConflictException('Tên thương hiệu đã tồn tại.');
+      throw new ConflictException({
+        code: 'BRAND_NAME_TAKEN',
+        message: 'Brand name already exists',
+      });
     }
   }
 

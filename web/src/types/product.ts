@@ -17,7 +17,7 @@ export type GenderTarget = "MALE" | "FEMALE" | "UNISEX";
 
 export type ProductStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 
-// Face shape taxonomy (khuôn mặt shapes) — used only by Product.faceShapes (which face shapes a
+// Face shape taxonomy (human face shapes) — used only by Product.faceShapes (which face shapes a
 // product suits). A different taxonomy from FrameShape above — do not conflate the two, mirrors
 // product-service's FaceShape enum (src/db/enums/face-shape.enum.ts).
 export type FaceShapeTag = "ROUND" | "SQUARE" | "OVAL" | "HEART" | "DIAMOND" | "OBLONG";
@@ -81,7 +81,7 @@ export interface ProductListParams {
   brandId?: string;
   frameShape?: FrameShape;
   page?: number;
-  limit?: number;
+  pageSize?: number;
   search?: string;
   minPrice?: number;
   maxPrice?: number;

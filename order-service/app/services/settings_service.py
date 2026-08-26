@@ -29,7 +29,7 @@ def get_settings_row(session: Session) -> ReconciliationSettings | None:
 def get_settings(session: Session) -> dict:
     row = get_settings_row(session)
     if row is None:
-        raise NotFoundError(messages.SETTINGS_NOT_FOUND)
+        raise NotFoundError(messages.SETTINGS_NOT_FOUND, code="SETTINGS_NOT_FOUND")
     return _serialize(row)
 
 
@@ -54,8 +54,9 @@ def update_settings(
     except (ValueError, TypeError):
         session.rollback()
         raise BadRequestError(
-            messages.VALIDATION_FAILED,
-            validation_errors={"X-User-Id": "X-User-Id phải là UUID hợp lệ"},
+            messages.MALFORMED_REQUEST,
+            code="MALFORMED_REQUEST",
+            details={"X-User-Id": ["X-User-Id must be a valid UUID"]},
         )
     session.commit()
     return _serialize(row)

@@ -112,7 +112,12 @@ describe('ProductsProxyService', () => {
 
       expect(error).toBeInstanceOf(HttpException);
       expect(error.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE);
-      expect(error.getResponse()).toContain('Không thể kết nối');
+      expect(error.getResponse()).toEqual({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'product-service is unreachable',
+        },
+      });
     });
 
     it('maps a timeout to 504 Gateway Timeout', async () => {

@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -45,7 +45,10 @@ export class ProductVariantsService {
     const product =
       await this.productRepository.findByIdWithBrandAndCategory(productId);
     if (!product) {
-      throw new NotFoundException(`Không tìm thấy sản phẩm ${productId}`);
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: `Product ${productId} not found`,
+      });
     }
 
     await this.assertNoDuplicateColorSize(productId, dto.color, dto.size);
@@ -120,9 +123,10 @@ export class ProductVariantsService {
   ): Promise<ProductVariant> {
     const variant = await this.variantRepository.findById(variantId);
     if (!variant || variant.productId !== productId) {
-      throw new NotFoundException(
-        `Không tìm thấy phiên bản ${variantId} của sản phẩm ${productId}`,
-      );
+      throw new NotFoundException({
+        code: 'VARIANT_NOT_FOUND',
+        message: `Variant ${variantId} not found for product ${productId}`,
+      });
     }
     return variant;
   }
@@ -142,9 +146,11 @@ export class ProductVariantsService {
         candidate.size === size,
     );
     if (collision) {
-      throw new BadRequestException(
-        `Sản phẩm đã có phiên bản màu "${color}", kích thước "${size}"`,
-      );
+      // A duplicate color/size is a uniqueness conflict, same class as a taken brand name.
+      throw new ConflictException({
+        code: 'VARIANT_DUPLICATE',
+        message: `Product already has a variant with color "${color}" and size "${size}"`,
+      });
     }
   }
 

@@ -1,3 +1,5 @@
+import type { PaginatedResponse } from "./api";
+
 // Mirrors order-service's order DTOs field-for-field (api-gateway passes these through
 // unchanged — see plan NFR1, no response reshaping in the proxy). See
 // order-service/app/services/serializers.py (responses) and app/schemas.py (requests),
@@ -103,24 +105,15 @@ export interface CancelOrderPayload {
   reason: string;
 }
 
-// Mirrors order-service's own paginated envelope — NOT product-service's flat
-// PaginatedResponse<T> shape in src/types/api.ts; field names differ, see
-// order-service/app/services/serializers.py (page_response).
-export interface OrderPageResponse<T> {
-  content: T[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-  first: boolean;
-  last: boolean;
-}
+// Order lists use the same `{data, meta}` envelope as every other paginated endpoint now
+// (order-service/app/services/serializers.py page_response) — see @/types/api.
+export type OrderPageResponse<T> = PaginatedResponse<T>;
 
-// Mirrors OrderController.getOrders' query params.
+// Mirrors OrderController.getOrders' query params — `page` is 1-based.
 export interface GetOrdersParams {
   status?: OrderStatus;
   page?: number;
-  size?: number;
+  pageSize?: number;
 }
 
 // Mirrors order-service's admin summary (app/services/order_service.py, admin_summary) —

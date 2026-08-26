@@ -8,7 +8,7 @@ from .conftest import bearer
 
 pytestmark = pytest.mark.django_db
 
-FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này"
+FORBIDDEN_MESSAGE = "You do not have permission to perform this action"
 
 
 @pytest.mark.parametrize(
@@ -35,9 +35,7 @@ def test_customer_gets_403_on_admin_endpoints(client, customer, method, path, bo
     )
     assert response.status_code == 403
     assert response.data == {
-        "success": False,
-        "message": FORBIDDEN_MESSAGE,
-        "data": None,
+        "error": {"code": "FORBIDDEN", "message": FORBIDDEN_MESSAGE}
     }
 
 
@@ -52,7 +50,7 @@ def test_customer_gets_403_on_admin_endpoints(client, customer, method, path, bo
 def test_missing_token_gets_401_not_403(client, db, method, path):
     response = getattr(client, method)(path)
     assert response.status_code == 401
-    assert response.data["message"] == "Token không hợp lệ hoặc đã hết hạn"
+    assert response.data["error"]["code"] == "INVALID_TOKEN"
 
 
 def test_admin_passes_permission_gate(client, admin_token):

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { FaceLandmarkerResult, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { computeOverlayTransform, MAX_FACES_TO_DETECT } from "@/lib/faceOverlay";
 
@@ -42,6 +43,9 @@ export function useStaticFaceOverlay({
 }: UseStaticFaceOverlayOptions): UseStaticFaceOverlayResult {
   const [status, setStatus] = useState<StaticFaceOverlayStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // The messages this hook sets are rendered as-is by FaceAnalysisPage, so they are translated
+  // here rather than in the component.
+  const t = useTranslations("face");
   const photoImageRef = useRef<HTMLImageElement | null>(null);
   const overlayImageElRef = useRef<HTMLImageElement | null>(null);
   const landmarksRef = useRef<NormalizedLandmark[] | null>(null);
@@ -125,7 +129,7 @@ export function useStaticFaceOverlay({
       if (cancelled) return;
       if (!loaded) {
         setStatus("error");
-        setErrorMessage("Không thể tải ảnh để thử kính. Vui lòng thử lại.");
+        setErrorMessage(t("overlay.photoLoadFailed"));
         return;
       }
       photoImageRef.current = img;
@@ -143,7 +147,7 @@ export function useStaticFaceOverlay({
       } catch {
         if (!cancelled) {
           setStatus("error");
-          setErrorMessage("Không thể tải mô hình nhận diện khuôn mặt. Vui lòng thử lại.");
+          setErrorMessage(t("overlay.modelLoadFailed"));
         }
         return;
       }
@@ -160,7 +164,7 @@ export function useStaticFaceOverlay({
       } catch {
         if (!cancelled) {
           setStatus("error");
-          setErrorMessage("Không thể nhận diện khuôn mặt trong ảnh này. Vui lòng thử lại.");
+          setErrorMessage(t("overlay.detectFailed"));
         }
         return;
       }
@@ -170,12 +174,12 @@ export function useStaticFaceOverlay({
       const faceCount = result.faceLandmarks.length;
       if (faceCount === 0) {
         setStatus("no-face");
-        setErrorMessage("Không phát hiện khuôn mặt nào trong ảnh này.");
+        setErrorMessage(t("overlay.noFace"));
         return;
       }
       if (faceCount > 1) {
         setStatus("multiple-faces");
-        setErrorMessage("Phát hiện nhiều hơn 1 khuôn mặt trong ảnh này.");
+        setErrorMessage(t("overlay.multipleFaces"));
         return;
       }
 
@@ -191,7 +195,7 @@ export function useStaticFaceOverlay({
       if (faceLandmarker) faceLandmarker.close();
       console.error = originalConsoleError;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw/canvasRef are stable across renders; only photoUrl should re-trigger detection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw/canvasRef/t are stable across renders; only photoUrl should re-trigger detection.
   }, [photoUrl]);
 
   // Redraw-only on overlayImageUrl change (NFR2/AC3) — no re-detection.

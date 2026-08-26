@@ -22,25 +22,28 @@ export class PaymentsController {
   @Get(':orderId')
   async findByOrderId(
     @Param('orderId', ParseUUIDPipe) orderId: string,
-  ): Promise<PaymentResponseDto> {
+  ): Promise<{ data: PaymentResponseDto }> {
     const payment = await this.paymentsService.getByOrderId(orderId);
     if (!payment) {
-      throw new NotFoundException(
-        `Không tìm thấy thanh toán cho đơn hàng ${orderId}`,
-      );
+      throw new NotFoundException({
+        code: 'PAYMENT_NOT_FOUND',
+        message: `No payment found for order ${orderId}`,
+      });
     }
     return {
-      id: payment.id,
-      orderId: payment.orderId,
-      userId: payment.userId,
-      orderCode: payment.orderCode,
-      amount: payment.amount,
-      paymentMethod: payment.paymentMethod,
-      status: payment.status,
-      transactionCode: payment.transactionCode,
-      failureReason: payment.failureReason,
-      createdAt: payment.createdAt,
-      updatedAt: payment.updatedAt,
+      data: {
+        id: payment.id,
+        orderId: payment.orderId,
+        userId: payment.userId,
+        orderCode: payment.orderCode,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+        transactionCode: payment.transactionCode,
+        failureReason: payment.failureReason,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      },
     };
   }
 }

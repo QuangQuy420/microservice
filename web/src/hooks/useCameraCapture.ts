@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 export type CameraCaptureStatus =
   | "idle"
@@ -29,6 +30,9 @@ export function useCameraCapture(
 ): UseCameraCaptureResult {
   const [status, setStatus] = useState<CameraCaptureStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Every message this hook produces is user-facing (rendered as the camera overlay's hint, or
+  // surfaced by the caller's catch), so it is translated here rather than in the component.
+  const t = useTranslations("face");
   const streamRef = useRef<MediaStream | null>(null);
   // Bumped by every start()/stop() call. A start() only applies its result if its own token is
   // still current when its async work resolves — otherwise a superseded call (e.g. React Strict
@@ -43,7 +47,7 @@ export function useCameraCapture(
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setStatus("unsupported");
-      setErrorMessage("Trình duyệt này không hỗ trợ truy cập camera.");
+      setErrorMessage(t("camera.unsupported"));
       return;
     }
 
@@ -56,7 +60,7 @@ export function useCameraCapture(
     } catch {
       if (token === startTokenRef.current) {
         setStatus("camera-denied");
-        setErrorMessage("Không thể truy cập camera. Vui lòng cho phép quyền camera để chụp ảnh.");
+        setErrorMessage(t("camera.denied"));
       }
       return;
     }
@@ -73,7 +77,7 @@ export function useCameraCapture(
       stream.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setStatus("error");
-      setErrorMessage("Không thể khởi động camera. Vui lòng thử lại.");
+      setErrorMessage(t("camera.startFailed"));
       return;
     }
 
@@ -85,7 +89,7 @@ export function useCameraCapture(
       streamRef.current = null;
       if (token === startTokenRef.current) {
         setStatus("error");
-        setErrorMessage("Không thể khởi động camera. Vui lòng thử lại.");
+        setErrorMessage(t("camera.startFailed"));
       }
       return;
     }
@@ -119,12 +123,12 @@ export function useCameraCapture(
   // Draws the current <video> frame onto an internal canvas, center-cropped to 3:4 (AC11) and
   // mirrored via a horizontal flip on the draw (per the confirmed follow-up decision — the saved
   // photo must match the mirrored live preview pixel-for-pixel, not just visually via CSS).
-  // Transitions to "captured" but does NOT stop the stream, so "Chụp lại" needs no new
+  // Transitions to "captured" but does NOT stop the stream, so the "retake" action needs no new
   // permission prompt (AC4).
   async function capture(): Promise<File> {
     const video = videoRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
-      throw new Error("Camera chưa sẵn sàng để chụp ảnh.");
+      throw new Error(t("camera.notReady"));
     }
 
     const videoWidth = video.videoWidth;
@@ -148,7 +152,7 @@ export function useCameraCapture(
     canvas.width = cropWidth;
     canvas.height = cropHeight;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Không thể chụp ảnh từ camera.");
+    if (!ctx) throw new Error(t("camera.captureError"));
 
     // Mirror the draw (negative scale) so the captured still matches what the user saw in the
     // mirrored live preview — a CSS-only mirror on <video> does not affect what drawImage/toBlob
@@ -160,13 +164,13 @@ export function useCameraCapture(
     const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob(resolve, "image/jpeg", 0.92);
     });
-    if (!blob) throw new Error("Không thể chụp ảnh từ camera.");
+    if (!blob) throw new Error(t("camera.captureError"));
 
     setStatus("captured");
     return new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
   }
 
-  // "Chụp lại": discards the captured still and goes back to the live feed. The stream was never
+  // "Retake": discards the captured still and goes back to the live feed. The stream was never
   // stopped by capture(), so this is just a status change — no new start()/permission prompt
   // (AC4).
   function retake() {

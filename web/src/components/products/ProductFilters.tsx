@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { formatFrameShapeVi } from "@/lib/labels";
+import { useTranslations } from "next-intl";
+import { useLabels } from "@/lib/labels";
 import type { Category } from "@/types/category";
 import type { Brand, FrameShape } from "@/types/product";
 
@@ -16,16 +17,17 @@ const SELECT_CLASS =
   "text-[0.9rem] font-normal text-text";
 
 interface PriceRange {
-  label: string;
+  // Key under the `products.filters` namespace — the band bounds are fixed, the wording is not.
+  labelKey: string;
   minPrice?: number;
   maxPrice?: number;
 }
 
 // FR4: fixed price bands (VND), wired to the real minPrice/maxPrice query params.
 const PRICE_RANGES: PriceRange[] = [
-  { label: "Dưới 1.500.000 ₫", maxPrice: 1_500_000 },
-  { label: "1.500.000 – 2.500.000 ₫", minPrice: 1_500_000, maxPrice: 2_500_000 },
-  { label: "Trên 2.500.000 ₫", minPrice: 2_500_000 },
+  { labelKey: "priceUnder", maxPrice: 1_500_000 },
+  { labelKey: "priceMid", minPrice: 1_500_000, maxPrice: 2_500_000 },
+  { labelKey: "priceOver", minPrice: 2_500_000 },
 ];
 
 function isActivePriceRange(
@@ -67,6 +69,8 @@ export function ProductFilters({
   maxPrice,
   onApplyFilters,
 }: ProductFiltersProps) {
+  const t = useTranslations("products.filters");
+  const labels = useLabels();
   const [isOpen, setIsOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<ProductFilterValues>({
     brandId,
@@ -118,7 +122,7 @@ export function ProductFilters({
           <path d="M7 12h10" />
           <path d="M10 17h4" />
         </svg>
-        Filter
+        {t("title")}
       </button>
 
       {isOpen && (
@@ -129,19 +133,19 @@ export function ProductFilters({
           aria-labelledby="product-filter-heading"
         >
           <div className="flex flex-[0_0_100%] items-center justify-between gap-4">
-            <h2 id="product-filter-heading" className="text-[1.35rem] font-bold">Filter</h2>
+            <h2 id="product-filter-heading" className="text-[1.35rem] font-bold">{t("title")}</h2>
             <button
               type="button"
               className="h-8 w-8 cursor-pointer border-0 bg-transparent p-0 font-body text-[1.75rem] leading-none text-text"
               onClick={() => setIsOpen(false)}
-              aria-label="Đóng bộ lọc"
+              aria-label={t("close")}
             >
               ×
             </button>
           </div>
 
           <label className={FIELD_CLASS} htmlFor="filter-brand">
-              <span>Thương hiệu</span>
+              <span>{t("brand")}</span>
               <select
                 id="filter-brand"
                 className={SELECT_CLASS}
@@ -153,7 +157,7 @@ export function ProductFilters({
                   }))
                 }
               >
-                <option value="">Tất cả thương hiệu</option>
+                <option value="">{t("allBrands")}</option>
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>{brand.name}</option>
                 ))}
@@ -161,7 +165,7 @@ export function ProductFilters({
           </label>
 
           <label className={FIELD_CLASS} htmlFor="filter-category">
-              <span>Danh mục</span>
+              <span>{t("category")}</span>
               <select
                 id="filter-category"
                 className={SELECT_CLASS}
@@ -173,7 +177,7 @@ export function ProductFilters({
                   }))
                 }
               >
-                <option value="">Tất cả danh mục</option>
+                <option value="">{t("allCategories")}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
@@ -181,7 +185,7 @@ export function ProductFilters({
           </label>
 
           <label className={FIELD_CLASS} htmlFor="filter-frame-shape">
-              <span>Dáng gọng</span>
+              <span>{t("frameShape")}</span>
               <select
                 id="filter-frame-shape"
                 className={SELECT_CLASS}
@@ -193,15 +197,15 @@ export function ProductFilters({
                   }))
                 }
               >
-                <option value="">Tất cả dáng gọng</option>
+                <option value="">{t("allFrameShapes")}</option>
                 {frameShapes.map((shape) => (
-                  <option key={shape} value={shape}>{formatFrameShapeVi(shape)}</option>
+                  <option key={shape} value={shape}>{labels.frameShape(shape)}</option>
                 ))}
               </select>
           </label>
 
           <label className={FIELD_CLASS} htmlFor="filter-price">
-              <span>Giá tiền</span>
+              <span>{t("price")}</span>
               <select
                 id="filter-price"
                 className={SELECT_CLASS}
@@ -217,19 +221,19 @@ export function ProductFilters({
                   }));
                 }}
               >
-                <option value="-1">Tất cả mức giá</option>
+                <option value="-1">{t("allPrices")}</option>
                 {PRICE_RANGES.map((range, index) => (
-                  <option key={range.label} value={index}>{range.label}</option>
+                  <option key={range.labelKey} value={index}>{t(range.labelKey)}</option>
                 ))}
               </select>
           </label>
 
           <div className="mt-2 flex flex-[0_0_100%] items-center justify-between gap-4">
             <button type="button" className="btn btn-outline" onClick={clearFilters}>
-              Xóa bộ lọc
+              {t("clear")}
             </button>
             <button type="button" className="btn btn-primary" onClick={applyFilters}>
-              Xong
+              {t("apply")}
             </button>
           </div>
         </section>

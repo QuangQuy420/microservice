@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 import { UpdateSagaSettingsDto } from '../routes/dto/update-saga-settings.dto';
 
@@ -231,14 +232,14 @@ export class OrdersProxyService {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       this.logger.error(`order-service timed out on ${path}: ${error.message}`);
       return new HttpException(
-        'order-service không phản hồi kịp thời',
+        apiError('UPSTREAM_TIMEOUT', 'order-service did not respond in time'),
         HttpStatus.GATEWAY_TIMEOUT,
       );
     }
 
     this.logger.error(`order-service unreachable on ${path}: ${error.message}`);
     return new HttpException(
-      'Không thể kết nối tới order-service',
+      apiError('UPSTREAM_UNAVAILABLE', 'order-service is unreachable'),
       HttpStatus.SERVICE_UNAVAILABLE,
     );
   }

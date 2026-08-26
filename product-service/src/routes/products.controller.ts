@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -11,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  UnprocessableEntityException,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -77,15 +77,22 @@ export class ProductsController {
     @UploadedFile() file: Express.Multer.File,
   ): Promise<ProductImageResponseDto> {
     if (!file) {
-      throw new BadRequestException('Cần có tệp tin');
+      throw new UnprocessableEntityException({
+        code: 'FILE_REQUIRED',
+        message: 'File is required',
+      });
     }
     if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(
-        `Tệp phải là 1 trong các định dạng: ${ALLOWED_IMAGE_MIME_TYPES.join(', ')}`,
-      );
+      throw new UnprocessableEntityException({
+        code: 'FILE_TYPE_INVALID',
+        message: `File must be one of: ${ALLOWED_IMAGE_MIME_TYPES.join(', ')}`,
+      });
     }
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      throw new BadRequestException('Tệp phải nhỏ hơn hoặc bằng 5 MB');
+      throw new UnprocessableEntityException({
+        code: 'FILE_TOO_LARGE',
+        message: 'File must be 5 MB or smaller',
+      });
     }
     if (body.variantId) {
       await this.productImagesService.assertVariantBelongsToProduct(
@@ -116,7 +123,10 @@ export class ProductsController {
     @Body() body: SetImageThumbnailDto,
   ): Promise<ProductImageResponseDto> {
     if (!body.isThumbnail) {
-      throw new BadRequestException('isThumbnail phải là true');
+      throw new UnprocessableEntityException({
+        code: 'THUMBNAIL_FLAG_REQUIRED',
+        message: 'isThumbnail must be true',
+      });
     }
     const image = await this.productImagesService.setThumbnail(id, imageId);
 

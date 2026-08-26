@@ -86,7 +86,7 @@ def _decode_image(image_bytes: bytes) -> np.ndarray:
     array = np.frombuffer(image_bytes, dtype=np.uint8)
     image = cv2.imdecode(array, cv2.IMREAD_COLOR)
     if image is None:
-        raise InvalidImageError("Không thể đọc ảnh — tệp có thể bị hỏng hoặc không phải là ảnh thật.")
+        raise InvalidImageError("Could not read the image — the file may be corrupt or not an image.")
     return image
 
 
@@ -204,10 +204,10 @@ def analyze_face(image_bytes: bytes) -> tuple[FaceMeasurements, FaceShape, float
 
     num_faces = len(result.face_landmarks) if result.face_landmarks else 0
     if num_faces == 0:
-        raise NoFaceDetectedError("Không phát hiện khuôn mặt nào trong ảnh đã tải lên.")
+        raise NoFaceDetectedError("No face was detected in the uploaded image.")
     if num_faces > 1:
         raise MultipleFacesDetectedError(
-            "Phát hiện nhiều khuôn mặt — vui lòng tải lên ảnh chỉ có đúng 1 khuôn mặt."
+            "Multiple faces detected — please upload an image with exactly 1 face."
         )
 
     landmarks = result.face_landmarks[0]

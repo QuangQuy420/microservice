@@ -15,7 +15,7 @@ import type {
   UpdateProductPayload,
   UpdateVariantPayload,
 } from "@/types/product";
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchList } from "./client";
 
 function authHeaders(token: string): HeadersInit {
   return {
@@ -31,16 +31,14 @@ export function getProducts(
   if (params.brandId) query.set("brandId", params.brandId);
   if (params.frameShape) query.set("frameShape", params.frameShape);
   if (params.page) query.set("page", String(params.page));
-  if (params.limit) query.set("limit", String(params.limit));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
   if (params.search) query.set("search", params.search);
   if (params.minPrice !== undefined) query.set("minPrice", String(params.minPrice));
   if (params.maxPrice !== undefined) query.set("maxPrice", String(params.maxPrice));
   if (params.includeAllStatuses) query.set("includeAllStatuses", "true");
 
   const queryString = query.toString();
-  return apiFetch<PaginatedResponse<Product>>(
-    `/products${queryString ? `?${queryString}` : ""}`,
-  );
+  return apiFetchList<Product>(`/products${queryString ? `?${queryString}` : ""}`);
 }
 
 export function getProductById(id: string): Promise<Product> {

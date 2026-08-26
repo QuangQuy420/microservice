@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from ..errors import ApiError
 from ..models import Address
 from ..presenters import address_response
-from ..responses import ok
+from ..responses import data_response
 from ..serializers import AddressSerializer
 from .helpers import parse_uuid_or_none
 
@@ -32,10 +32,7 @@ class AddressesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return ok(
-            "Lấy danh sách địa chỉ thành công",
-            [address_response(a) for a in _ordered(request.user)],
-        )
+        return data_response([address_response(a) for a in _ordered(request.user)])
 
     def post(self, request):
         serializer = AddressSerializer(data=request.data)
@@ -59,7 +56,7 @@ class AddressesView(APIView):
             )
 
         # Original quirk: POST returns 200, not 201.
-        return ok("Thêm địa chỉ thành công", address_response(address), status=200)
+        return data_response(address_response(address), status=200)
 
 
 class AddressDetailView(APIView):
@@ -84,7 +81,7 @@ class AddressDetailView(APIView):
             # isDefault=false on the current default is ignored.
             address.save()
 
-        return ok("Cập nhật địa chỉ thành công", address_response(address))
+        return data_response(address_response(address))
 
     def delete(self, request, address_id):
         address = _get_owned_address(request.user, address_id)
@@ -96,4 +93,4 @@ class AddressDetailView(APIView):
                 if successor is not None:
                     successor.is_default = True
                     successor.save(update_fields=["is_default", "updated_at"])
-        return ok("Xóa địa chỉ thành công", None)
+        return data_response(None)

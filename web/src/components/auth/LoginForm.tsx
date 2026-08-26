@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { login } from "@/lib/api";
 import { saveAccessToken } from "@/lib/auth/session";
 import { useAuthForm } from "@/hooks/useAuthForm";
@@ -24,6 +25,7 @@ const SUBMIT_CLASS =
   "enabled:hover:shadow-[0_10px_22px_rgba(43,36,32,0.14)] " +
   "disabled:cursor-not-allowed disabled:opacity-[0.58] motion-reduce:transition-none";
 
+// Field errors hold message keys, not text, so the rendered copy follows the active locale.
 interface FieldErrors {
   identifier?: string;
   password?: string;
@@ -36,13 +38,13 @@ function validate(
   const errors: FieldErrors = {};
 
   if (!identifier.trim()) {
-    errors.identifier = "Email hoặc tên đăng nhập là bắt buộc.";
+    errors.identifier = "login.errors.identifierRequired";
   }
 
   if (!password) {
-    errors.password = "Mật khẩu là bắt buộc.";
+    errors.password = "login.errors.passwordRequired";
   } else if (password.length < 8) {
-    errors.password = "Mật khẩu phải có ít nhất 8 ký tự.";
+    errors.password = "login.errors.passwordTooShort";
   }
 
   return errors;
@@ -50,6 +52,7 @@ function validate(
 
 export function LoginForm() {
   const router = useRouter();
+  const t = useTranslations("auth");
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -59,6 +62,7 @@ export function LoginForm() {
   const {
     isSubmitting,
     error,
+    details,
     submit,
   } = useAuthForm(login);
 
@@ -83,15 +87,7 @@ export function LoginForm() {
       return;
     }
 
-    const token =
-        response.data.accessToken ??
-        response.data.token;
-
-    if (!token) {
-      return;
-    }
-
-    saveAccessToken(token);
+    saveAccessToken(response.accessToken);
     router.push("/");
     router.refresh();
   }
@@ -103,7 +99,7 @@ export function LoginForm() {
           noValidate
       >
         <label htmlFor="login-identifier" className={LABEL_CLASS}>
-          Email hoặc tên đăng nhập
+          {t("login.identifierLabel")}
           <input
               id="login-identifier"
               className={INPUT_CLASS}
@@ -117,13 +113,20 @@ export function LoginForm() {
 
           {fieldErrors.identifier && (
               <span className="field-error">
-            {fieldErrors.identifier}
+            {t(fieldErrors.identifier)}
           </span>
           )}
+
+          {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+          {details.identifier?.map((msg) => (
+              <span key={msg} className="field-error">
+            {msg}
+          </span>
+          ))}
         </label>
 
         <label htmlFor="login-password" className={LABEL_CLASS}>
-          Mật khẩu
+          {t("login.passwordLabel")}
           <input
               id="login-password"
               className={INPUT_CLASS}
@@ -139,21 +142,27 @@ export function LoginForm() {
                 href="/forgot-password"
                 className="text-[0.8rem] font-[650] text-accent-dark no-underline hover:underline"
             >
-              Quên mật khẩu?
+              {t("login.forgotPassword")}
             </Link>
           </div>
 
           {fieldErrors.password && (
               <span className="field-error">
-            {fieldErrors.password}
+            {t(fieldErrors.password)}
           </span>
           )}
+
+          {details.password?.map((msg) => (
+              <span key={msg} className="field-error">
+            {msg}
+          </span>
+          ))}
         </label>
 
         <button type="submit" className={SUBMIT_CLASS} disabled={isSubmitting}>
           {isSubmitting
-              ? "Đang đăng nhập..."
-              : "Đăng nhập"}
+              ? t("login.submitting")
+              : t("login.submit")}
         </button>
 
         {error && (

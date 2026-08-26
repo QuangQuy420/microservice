@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 
 /**
@@ -47,14 +48,16 @@ export class RecommendationProxyService {
   /**
    * Maps a downstream failure to a clear gateway-side error instead of
    * letting it surface as an unhandled 500:
-   * - downstream responded (e.g. 400) -> passthrough its status/body.
+   * - downstream responded (e.g. 422) -> passthrough its status/body verbatim
+   *   (`recommendation-service` already emits the `{"error": {...}}`
+   *   envelope, so the gateway must not reshape it).
    * - downstream timed out -> 504 Gateway Timeout.
    * - downstream unreachable (connection refused/reset/DNS) -> 503.
    */
   private toGatewayError(error: AxiosError, path: string): HttpException {
     if (error.response) {
       return new HttpException(
-        this.normalizeErrorBody(error.response.data) ?? error.message,
+        error.response.data ?? error.message,
         error.response.status,
       );
     }
@@ -62,36 +65,21 @@ export class RecommendationProxyService {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       this.logger.error(`recommendation-service timed out on ${path}: ${error.message}`);
       return new HttpException(
-        'recommendation-service không phản hồi kịp thời',
+        apiError(
+          'UPSTREAM_TIMEOUT',
+          'recommendation-service did not respond in time',
+        ),
         HttpStatus.GATEWAY_TIMEOUT,
       );
     }
 
     this.logger.error(`recommendation-service unreachable on ${path}: ${error.message}`);
     return new HttpException(
-      'Không thể kết nối tới recommendation-service',
+      apiError(
+        'UPSTREAM_UNAVAILABLE',
+        'recommendation-service is unreachable',
+      ),
       HttpStatus.SERVICE_UNAVAILABLE,
     );
-  }
-
-  /**
-   * `recommendation-service` (FastAPI) returns errors as `{"detail": "..."}`
-   * by default if it raises `HTTPException(detail=...)` — unlike
-   * `product-service` (Nest), whose exception filter already shapes errors
-   * as `{message: "..."}`, which is the key `web`'s `apiFetch` reads (see
-   * `web/src/lib/api/client.ts`). Without this, a real domain message would
-   * silently get lost and `web` would fall back to a generic status-text
-   * error.
-   */
-  private normalizeErrorBody(data: unknown): unknown {
-    if (
-      data &&
-      typeof data === 'object' &&
-      'detail' in data &&
-      !('message' in data)
-    ) {
-      return { ...data, message: (data as { detail: unknown }).detail };
-    }
-    return data;
   }
 }

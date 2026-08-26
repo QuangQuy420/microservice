@@ -38,16 +38,17 @@ def _parse_uuid(value, field: str) -> uuid.UUID:
         return uuid.UUID(str(value))
     except (ValueError, TypeError):
         raise BadRequestError(
-            messages.VALIDATION_FAILED,
-            validation_errors={field: f"{field} phải là UUID hợp lệ"},
+            messages.MALFORMED_REQUEST,
+            code="MALFORMED_REQUEST",
+            details={field: [f"{field} must be a valid UUID"]},
         )
 
 
-def _validate_paging(page: int, size: int) -> None:
-    if page < 0:
-        raise BadRequestError(messages.PAGE_NEGATIVE)
-    if size < 1 or size > 100:
-        raise BadRequestError(messages.PAGE_SIZE_RANGE)
+def _validate_paging(page: int, page_size: int) -> None:
+    if page < 1:
+        raise BadRequestError(messages.PAGE_NEGATIVE, code="PAGE_INVALID")
+    if page_size < 1 or page_size > 100:
+        raise BadRequestError(messages.PAGE_SIZE_RANGE, code="PAGE_SIZE_INVALID")
 
 
 def _add_history(
@@ -75,12 +76,14 @@ class OrderService:
     def checkout(self, user_id: str, request: CheckoutRequest) -> dict:
         cart = self._carts.load(user_id)
         if cart is None or not cart.get("items"):
-            raise NotFoundError(messages.CART_NOT_FOUND)
+            raise NotFoundError(messages.CART_NOT_FOUND, code="CART_EMPTY")
 
         cart_items_by_variant = {str(i["variantId"]): i for i in cart["items"]}
         selected_ids = [str(v) for v in request.variantIds]
         if any(v not in cart_items_by_variant for v in selected_ids):
-            raise BadRequestError(messages.CHECKOUT_ITEMS_NOT_IN_CART)
+            raise BadRequestError(
+                messages.CHECKOUT_ITEMS_NOT_IN_CART, code="CHECKOUT_ITEMS_NOT_IN_CART"
+            )
 
         order_id = uuid.uuid4()
         items: list[OrderItem] = []
@@ -97,10 +100,12 @@ class OrderService:
             variant = _find_variant(product, variant_id)
             base = product.get("basePrice")
             if base is None:
-                raise BadRequestError(messages.PRODUCT_NO_PRICE)
+                raise BadRequestError(messages.PRODUCT_NO_PRICE, code="PRODUCT_NO_PRICE")
             unit_price = _as_decimal(base) + _as_decimal(variant.get("extraPrice") or 0)
             if unit_price < 0:
-                raise BadRequestError(messages.PRODUCT_INVALID_PRICE)
+                raise BadRequestError(
+                    messages.PRODUCT_INVALID_PRICE, code="PRODUCT_INVALID_PRICE"
+                )
             quantity = int(cart_item["quantity"])
             subtotal = unit_price * quantity
             total += subtotal
@@ -172,17 +177,18 @@ class OrderService:
     # ---------- queries ----------
 
     def _page_orders(
-        self, page: int, size: int, status: str | None, user_id: str | None
+        self, page: int, page_size: int, status: str | None, user_id: str | None
     ) -> dict:
-        _validate_paging(page, size)
+        _validate_paging(page, page_size)
         conditions = []
         if user_id is not None:
             conditions.append(Order.user_id == _parse_uuid(user_id, "userId"))
         if status:
             if status not in {s.value for s in OrderStatus}:
                 raise BadRequestError(
-                    messages.VALIDATION_FAILED,
-                    validation_errors={"status": "Trạng thái đơn hàng không hợp lệ"},
+                    messages.ORDER_STATUS_INVALID,
+                    code="INVALID_ORDER_STATUS",
+                    details={"status": [messages.ORDER_STATUS_INVALID]},
                 )
             conditions.append(Order.status == status)
         base = select(Order)
@@ -192,16 +198,20 @@ class OrderService:
             count_stmt = count_stmt.where(cond)
         total = self._session.scalar(count_stmt) or 0
         rows = self._session.scalars(
-            base.order_by(Order.created_at.desc()).offset(page * size).limit(size)
+            base.order_by(Order.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         ).all()
         content = [serializers.order_summary_response(o) for o in rows]
-        return serializers.page_response(content, page, size, total)
+        return serializers.page_response(content, page, page_size, total)
 
-    def list_user_orders(self, user_id: str, status: str | None, page: int, size: int) -> dict:
-        return self._page_orders(page, size, status, user_id)
+    def list_user_orders(
+        self, user_id: str, status: str | None, page: int, page_size: int
+    ) -> dict:
+        return self._page_orders(page, page_size, status, user_id)
 
-    def list_admin_orders(self, status: str | None, page: int, size: int) -> dict:
-        return self._page_orders(page, size, status, None)
+    def list_admin_orders(self, status: str | None, page: int, page_size: int) -> dict:
+        return self._page_orders(page, page_size, status, None)
 
     def get_user_order(self, user_id: str, order_id: str) -> dict:
         order = self._find_order(order_id, user_id=user_id)
@@ -225,13 +235,13 @@ class OrderService:
         try:
             oid = uuid.UUID(str(order_id))
         except (ValueError, TypeError):
-            raise NotFoundError(messages.ORDER_NOT_FOUND)
+            raise NotFoundError(messages.ORDER_NOT_FOUND, code="ORDER_NOT_FOUND")
         stmt = select(Order).where(Order.id == oid)
         if user_id is not None:
             stmt = stmt.where(Order.user_id == _parse_uuid(user_id, "userId"))
         order = self._session.scalars(stmt).first()
         if order is None:
-            raise NotFoundError(messages.ORDER_NOT_FOUND)
+            raise NotFoundError(messages.ORDER_NOT_FOUND, code="ORDER_NOT_FOUND")
         return order
 
     # ---------- cancel (user) ----------
@@ -239,7 +249,10 @@ class OrderService:
     def cancel_order(self, user_id: str, order_id: str, request: CancelOrderRequest) -> dict:
         order = self._find_order(order_id, user_id=user_id)
         if order.status not in CANCELLABLE_STATUSES:
-            raise BadRequestError(messages.CANCEL_NOT_ALLOWED.format(status=order.status))
+            raise BadRequestError(
+                messages.CANCEL_NOT_ALLOWED.format(status=order.status),
+                code="CANCEL_NOT_ALLOWED",
+            )
         release = order.status in RELEASE_ON_CANCEL_STATUSES
         order.status = OrderStatus.CANCELLED.value
         order.updated_at = now_vn()
@@ -268,7 +281,8 @@ class OrderService:
         allowed = STATUS_TRANSITIONS.get(order.status, set())
         if target == order.status or target not in allowed:
             raise BadRequestError(
-                messages.TRANSITION_NOT_ALLOWED.format(cur=order.status, target=target)
+                messages.TRANSITION_NOT_ALLOWED.format(cur=order.status, target=target),
+                code="INVALID_STATUS_TRANSITION",
             )
         previous = order.status
         order.status = target

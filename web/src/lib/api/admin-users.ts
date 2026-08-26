@@ -2,9 +2,8 @@
 // only ever acts on the *caller's own* account via /users/me). Everything here acts on an
 // arbitrary user by id and requires the caller to hold `user:manage-roles`.
 
-import type { ApiResponse } from "@/types/auth";
 import type { PaginatedResponse } from "@/types/api";
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchList } from "./client";
 
 // Mirrors user-service's UserResponse (id, email, username, roles: string[], status) —
 // returned by both the assign- and remove-role endpoints.
@@ -25,10 +24,10 @@ function authHeaders(token: string): HeadersInit {
 export function listUsers(
     token: string,
     page: number,
-    limit: number,
-): Promise<ApiResponse<PaginatedResponse<AdminUser>>> {
-    return apiFetch<ApiResponse<PaginatedResponse<AdminUser>>>(
-        `/users?page=${encodeURIComponent(page)}&limit=${encodeURIComponent(limit)}`,
+    pageSize: number,
+): Promise<PaginatedResponse<AdminUser>> {
+    return apiFetchList<AdminUser>(
+        `/users?page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`,
         {
             method: "GET",
             headers: authHeaders(token),
@@ -40,23 +39,20 @@ export function assignRoleToUser(
     token: string,
     userId: string,
     roleId: string,
-): Promise<ApiResponse<AdminUser>> {
-    return apiFetch<ApiResponse<AdminUser>>(
-        `/users/${encodeURIComponent(userId)}/roles`,
-        {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify({ roleId }),
-        },
-    );
+): Promise<AdminUser> {
+    return apiFetch<AdminUser>(`/users/${encodeURIComponent(userId)}/roles`, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ roleId }),
+    });
 }
 
 export function removeRoleFromUser(
     token: string,
     userId: string,
     roleId: string,
-): Promise<ApiResponse<AdminUser>> {
-    return apiFetch<ApiResponse<AdminUser>>(
+): Promise<AdminUser> {
+    return apiFetch<AdminUser>(
         `/users/${encodeURIComponent(userId)}/roles/${encodeURIComponent(roleId)}`,
         {
             method: "DELETE",

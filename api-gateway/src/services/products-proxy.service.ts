@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import * as FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 
 /**
@@ -286,14 +287,14 @@ export class ProductsProxyService {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       this.logger.error(`product-service timed out on ${path}: ${error.message}`);
       return new HttpException(
-        'product-service không phản hồi kịp thời',
+        apiError('UPSTREAM_TIMEOUT', 'product-service did not respond in time'),
         HttpStatus.GATEWAY_TIMEOUT,
       );
     }
 
     this.logger.error(`product-service unreachable on ${path}: ${error.message}`);
     return new HttpException(
-      'Không thể kết nối tới product-service',
+      apiError('UPSTREAM_UNAVAILABLE', 'product-service is unreachable'),
       HttpStatus.SERVICE_UNAVAILABLE,
     );
   }

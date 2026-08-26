@@ -1,6 +1,4 @@
 """User endpoints: admin list, own profile, change-password, role assignment."""
-import math
-
 from django.db import transaction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -10,7 +8,7 @@ from ..models import Profile, User, UserRole
 from ..normalize import blank_to_none
 from ..permissions import require
 from ..presenters import profile_response, user_response
-from ..responses import ok
+from ..responses import data_response, list_response
 from ..security import check_password, hash_password
 from ..serializers import (
     AssignRoleSerializer,
@@ -32,23 +30,14 @@ class UserListView(APIView):
 
     def get(self, request):
         page = max(1, _int_param(request.query_params.get("page"), 1))
-        limit = max(1, _int_param(request.query_params.get("limit"), 20))
+        page_size = max(1, _int_param(request.query_params.get("pageSize"), 20))
 
         queryset = User.objects.order_by("created_at")
         total = queryset.count()
-        offset = (page - 1) * limit
-        items = [user_response(u) for u in queryset[offset : offset + limit]]
+        offset = (page - 1) * page_size
+        items = [user_response(u) for u in queryset[offset : offset + page_size]]
 
-        return ok(
-            "Lấy danh sách người dùng thành công",
-            {
-                "items": items,
-                "total": total,
-                "page": page,
-                "limit": limit,
-                "totalPages": math.ceil(total / limit),
-            },
-        )
+        return list_response(items, page, page_size, total)
 
 
 class MeView(APIView):
@@ -62,10 +51,7 @@ class MeView(APIView):
 
     def get(self, request):
         profile = self._profile(request.user)
-        return ok(
-            "Lấy thông tin cá nhân thành công",
-            profile_response(request.user, profile),
-        )
+        return data_response(profile_response(request.user, profile))
 
     def put(self, request):
         serializer = UpdateProfileSerializer(data=request.data)
@@ -84,12 +70,11 @@ class MeView(APIView):
             profile.address = blank_to_none(data["address"])
         if data.get("dateOfBirth") is not None:
             profile.date_of_birth = data["dateOfBirth"]
+        if data.get("preferredLanguage") is not None:
+            profile.preferred_language = data["preferredLanguage"]
         profile.save()
 
-        return ok(
-            "Cập nhật thông tin cá nhân thành công",
-            profile_response(request.user, profile),
-        )
+        return data_response(profile_response(request.user, profile))
 
 
 class ChangePasswordView(APIView):
@@ -108,7 +93,7 @@ class ChangePasswordView(APIView):
 
         user.password_hash = hash_password(data["newPassword"])
         user.save(update_fields=["password_hash", "updated_at"])
-        return ok("Đổi mật khẩu thành công", None)
+        return data_response(None)
 
 
 class UserRolesView(APIView):
@@ -124,9 +109,7 @@ class UserRolesView(APIView):
         with transaction.atomic():
             UserRole.objects.get_or_create(user=user, role=role)
 
-        return ok(
-            "Gán vai trò cho người dùng thành công", user_response(user), status=201
-        )
+        return data_response(user_response(user), status=201)
 
 
 class UserRoleDetailView(APIView):
@@ -144,4 +127,4 @@ class UserRoleDetailView(APIView):
         if deleted == 0:
             raise ApiError("USER_ROLE_NOT_ASSIGNED")
 
-        return ok("Gỡ vai trò khỏi người dùng thành công", user_response(user))
+        return data_response(user_response(user))

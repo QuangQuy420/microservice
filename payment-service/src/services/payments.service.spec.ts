@@ -90,8 +90,8 @@ describe('PaymentsService', () => {
     expect(sagaPublisher.publishPaymentFailed).not.toHaveBeenCalled();
   });
 
-  it('fails a CARD request below the minimum with a Vietnamese reason naming the minimum, persists FAILED (AC2)', async () => {
-    const failureReason = `Số tiền thanh toán dưới hạn mức tối thiểu (tối thiểu ${DEFAULT_MIN_CARD_AMOUNT.toLocaleString('vi-VN')} ₫)`;
+  it('fails a CARD request below the minimum with an English reason naming the minimum, persists FAILED (AC2)', async () => {
+    const failureReason = `Payment amount is below the minimum (minimum ${DEFAULT_MIN_CARD_AMOUNT} VND)`;
     const stored = buildPayment({
       id: 'payment-2',
       orderId: 'order-2',
@@ -109,7 +109,7 @@ describe('PaymentsService', () => {
       'ORD-2',
       500_000,
       'CARD',
-      expect.stringContaining('1.000.000'),
+      expect.stringContaining('1000000'),
     );
     expect(paymentRepository.createPaid).not.toHaveBeenCalled();
     expect(sagaPublisher.publishPaymentFailed).toHaveBeenCalledWith(
@@ -119,8 +119,8 @@ describe('PaymentsService', () => {
     expect(sagaPublisher.publishPaymentCompleted).not.toHaveBeenCalled();
   });
 
-  it('fails a non-CARD payment method with a Vietnamese reason naming the unsupported method (AC3)', async () => {
-    const failureReason = 'Phương thức thanh toán không được hỗ trợ: COD';
+  it('fails a non-CARD payment method with an English reason naming the unsupported method (AC3)', async () => {
+    const failureReason = 'Unsupported payment method: COD';
     const stored = buildPayment({
       id: 'payment-3',
       orderId: 'order-3',
@@ -182,7 +182,7 @@ describe('PaymentsService', () => {
   });
 
   it('does not re-decide or re-persist a duplicate request for an already-FAILED order, just re-publishes (AC4)', async () => {
-    const failureReason = `Số tiền thanh toán dưới hạn mức tối thiểu (tối thiểu ${DEFAULT_MIN_CARD_AMOUNT.toLocaleString('vi-VN')} ₫)`;
+    const failureReason = `Payment amount is below the minimum (minimum ${DEFAULT_MIN_CARD_AMOUNT} VND)`;
     const stored = buildPayment({
       id: 'payment-5',
       orderId: 'order-5',

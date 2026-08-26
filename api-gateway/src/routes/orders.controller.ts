@@ -17,6 +17,7 @@ import { Request } from 'express';
 import { AuthenticatedUser, JwtGuard } from '../auth/jwt.guard';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
+import { validationExceptionFactory } from '../common/api-error';
 import { OrdersProxyService } from '../services/orders-proxy.service';
 import { UpdateSagaSettingsDto } from './dto/update-saga-settings.dto';
 
@@ -238,6 +239,7 @@ export class AdminSagaSettingsController {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
+      exceptionFactory: validationExceptionFactory,
     }),
   )
   updateSettings(

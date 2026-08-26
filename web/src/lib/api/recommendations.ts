@@ -1,5 +1,5 @@
 import type { RecommendRequest, RecommendResponse } from "@/types/recommendation";
-import { apiFetch } from "./client";
+import { apiFetchList } from "./client";
 
 // Forwards to api-gateway's POST /api/recommendations, which proxies to
 // recommendation-service's POST /recommend. Unauthenticated (Q2 in the plan) — mirrors
@@ -9,8 +9,8 @@ export function getRecommendations(
   filters: Omit<RecommendRequest, "faceShape"> = {},
 ): Promise<RecommendResponse> {
   const body: RecommendRequest = { faceShape, ...filters };
-  return apiFetch<RecommendResponse>("/recommendations", {
+  return apiFetchList<RecommendResponse[number]>("/recommendations", {
     method: "POST",
     body: JSON.stringify(body),
-  });
+  }).then((response) => response.data);
 }

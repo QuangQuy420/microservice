@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { LoginForm } from "@/components/auth/LoginForm";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+    const t = await getTranslations("auth");
+
     return (
         <main className="mx-auto grid min-h-[calc(100vh-190px)] max-w-[1100px] place-items-center px-6 py-[clamp(2rem,6vw,4.5rem)] max-sm:px-4">
             <section
@@ -9,26 +12,26 @@ export default function LoginPage() {
                 aria-labelledby="login-heading"
             >
                 <p className="mb-[0.55rem] text-[0.76rem] font-bold tracking-[0.11em] text-accent-dark uppercase">
-                    Chào mừng trở lại
+                    {t("login.eyebrow")}
                 </p>
 
                 <h1
                     id="login-heading"
                     className="mb-[0.6rem] font-heading text-[clamp(1.7rem,4vw,2.25rem)] font-[650]"
                 >
-                    Đăng nhập
+                    {t("login.title")}
                 </h1>
 
                 <p className="mb-6 text-[0.92rem] leading-[1.6] text-text-secondary">
-                    Đăng nhập để quản lý hồ sơ và trải nghiệm mua sắm.
+                    {t("login.subtitle")}
                 </p>
 
                 <LoginForm />
 
                 <div className="mt-5 text-center text-[0.86rem] text-text-secondary">
-                    Chưa có tài khoản?{" "}
+                    {t("login.noAccount")}{" "}
                     <Link href="/register" className="font-bold no-underline hover:underline">
-                        Đăng ký ngay
+                        {t("login.registerLink")}
                     </Link>
                 </div>
             </section>

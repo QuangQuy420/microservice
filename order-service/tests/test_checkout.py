@@ -43,7 +43,7 @@ class TestCheckoutHappyPath:
         product, variant = _setup_cart(cart_repo, product_client)
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([variant["id"]]))
         assert res.status_code == 201
-        body = res.json()
+        body = res.json()["data"]
         assert re.fullmatch(r"ORD-\d{13}-[0-9A-F]{6}", body["orderCode"])
         assert body["orderStatus"] == "PENDING"
         assert body["paymentId"] is None
@@ -56,7 +56,7 @@ class TestCheckoutHappyPath:
     ):
         product, variant = _setup_cart(cart_repo, product_client)
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([variant["id"]]))
-        order_id = uuid.UUID(res.json()["orderId"])
+        order_id = uuid.UUID(res.json()["data"]["orderId"])
 
         order = session.get(Order, order_id)
         assert order.status == "PENDING"
@@ -74,7 +74,7 @@ class TestCheckoutHappyPath:
 
         assert len(order.status_histories) == 1
         assert order.status_histories[0].status == "PENDING"
-        assert order.status_histories[0].note == "Đơn hàng được tạo"
+        assert order.status_histories[0].note == "Order created"
 
         logs = session.scalars(
             select(OrderSagaLog).where(OrderSagaLog.order_id == order_id)
@@ -82,7 +82,7 @@ class TestCheckoutHappyPath:
         stages = [log.stage for log in logs]
         assert stages == ["CREATED", "STOCK_RESERVE_REQUESTED"]
         reserve_log = logs[1]
-        assert reserve_log.message == "Đã gửi yêu cầu giữ hàng"
+        assert reserve_log.message == "Stock reservation requested"
         assert reserve_log.target_service == "PRODUCT_SERVICE"
 
     def test_outbox_event_written_in_same_transaction(
@@ -90,7 +90,7 @@ class TestCheckoutHappyPath:
     ):
         product, variant = _setup_cart(cart_repo, product_client)
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([variant["id"]]))
-        order_id = res.json()["orderId"]
+        order_id = res.json()["data"]["orderId"]
 
         events = session.scalars(select(OutboxEvent)).all()
         assert len(events) == 1
@@ -107,7 +107,7 @@ class TestCheckoutHappyPath:
         product, variant = _setup_cart(cart_repo, product_client)
         product["basePrice"] = Decimal("150000.00")
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([variant["id"]]))
-        assert res.json()["totalAmount"] == 340000.00  # (150000+20000)*2
+        assert res.json()["data"]["totalAmount"] == 340000.00  # (150000+20000)*2
 
     def test_cart_is_not_cleared_at_checkout(self, client, cart_repo, product_client):
         product, variant = _setup_cart(cart_repo, product_client)
@@ -133,8 +133,8 @@ class TestCheckoutHappyPath:
         )
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([v2["id"]]))
         assert res.status_code == 201
-        assert res.json()["totalAmount"] == 150000.00
-        order = session.get(Order, uuid.UUID(res.json()["orderId"]))
+        assert res.json()["data"]["totalAmount"] == 150000.00
+        order = session.get(Order, uuid.UUID(res.json()["data"]["orderId"]))
         assert len(order.items) == 1
         assert str(order.items[0].variant_id) == v2["id"]
 
@@ -150,7 +150,10 @@ class TestCheckoutErrors:
             f"/api/v1/users/{USER}/checkout", json=_body([str(uuid.uuid4())])
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Giỏ hàng không tồn tại hoặc đang trống"
+        assert res.json()["error"] == {
+            "code": "CART_EMPTY",
+            "message": "Cart does not exist or is empty",
+        }
 
     def test_selected_variant_not_in_cart(self, client, cart_repo, product_client):
         product, variant = _setup_cart(cart_repo, product_client)
@@ -158,17 +161,19 @@ class TestCheckoutErrors:
             f"/api/v1/users/{USER}/checkout", json=_body([str(uuid.uuid4())])
         )
         assert res.status_code == 400
-        assert res.json()["message"] == "Một số sản phẩm đã chọn không có trong giỏ hàng"
+        assert res.json()["error"] == {
+            "code": "CHECKOUT_ITEMS_NOT_IN_CART",
+            "message": "Some selected products are not in the cart",
+        }
 
     def test_empty_variant_ids(self, client):
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([]))
-        assert res.status_code == 400
-        body = res.json()
-        assert body["message"] == "Dữ liệu gửi lên không hợp lệ"
-        assert (
-            body["validationErrors"]["variantIds"]
-            == "Vui lòng chọn ít nhất 1 sản phẩm để thanh toán"
-        )
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert error["details"]["variantIds"] == [
+            "Select at least 1 product to check out"
+        ]
 
     def test_invalid_phone(self, client):
         for phone in ["12345", "abc", "84912345678", "091234567", "+8491234567890"]:
@@ -176,8 +181,9 @@ class TestCheckoutErrors:
                 f"/api/v1/users/{USER}/checkout",
                 json=_body([str(uuid.uuid4())], receiverPhone=phone),
             )
-            assert res.status_code == 400
-            assert res.json()["validationErrors"]["receiverPhone"] == "Số điện thoại không hợp lệ"
+            assert res.status_code == 422
+            details = res.json()["error"]["details"]
+            assert details["receiverPhone"] == ["Phone number is invalid"]
 
     def test_valid_phone_formats_pass_validation(self, client, cart_repo, product_client):
         product, variant = _setup_cart(cart_repo, product_client)
@@ -193,16 +199,20 @@ class TestCheckoutErrors:
             f"/api/v1/users/{USER}/checkout",
             json=_body([str(uuid.uuid4())], receiverName="  "),
         )
-        assert res.status_code == 400
-        assert "receiverName" in res.json()["validationErrors"]
+        assert res.status_code == 422
+        assert res.json()["error"]["details"]["receiverName"] == [
+            "Receiver name is required"
+        ]
 
     def test_receiver_name_max_150(self, client):
         res = client.post(
             f"/api/v1/users/{USER}/checkout",
             json=_body([str(uuid.uuid4())], receiverName="x" * 151),
         )
-        assert res.status_code == 400
-        assert "receiverName" in res.json()["validationErrors"]
+        assert res.status_code == 422
+        assert res.json()["error"]["details"]["receiverName"] == [
+            "Receiver name must not exceed 150 characters"
+        ]
 
     def test_product_gone_at_checkout_gives_404(self, client, cart_repo, product_client):
         variant = make_variant()
@@ -211,4 +221,7 @@ class TestCheckoutErrors:
         add_cart(cart_repo, USER, [cart_item(product["id"], variant["id"])])
         res = client.post(f"/api/v1/users/{USER}/checkout", json=_body([variant["id"]]))
         assert res.status_code == 404
-        assert res.json()["message"] == f"Không tìm thấy sản phẩm: {product['id']}"
+        assert res.json()["error"] == {
+            "code": "PRODUCT_NOT_FOUND",
+            "message": f"Product not found: {product['id']}",
+        }

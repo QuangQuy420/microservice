@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useCameraCapture } from "@/hooks/useCameraCapture";
 import { cn } from "@/lib/cn";
 
@@ -9,30 +10,31 @@ interface FaceCameraCaptureProps {
   onCancel: () => void;
 }
 
-// Vietnamese hints for the non-"streaming"/"captured" statuses, mirroring TryOnPage.tsx's
-// STATUS_HINTS wording style (AC2, AC6).
-const STATUS_HINTS: Partial<Record<string, string>> = {
-  idle: "Đang khởi động camera...",
-  "requesting-camera": "Đang yêu cầu quyền truy cập camera...",
-};
-
 // `.btn-outline`'s dark text/border (readable on the page's light background) disappears against
 // this overlay, which always sits on top of a photo — flip it to a light outline with a
 // translucent dark fill so it stays legible regardless of what's behind it.
 const OVERLAY_OUTLINE_BUTTON_CLASS =
   "btn btn-outline btn-small border-[rgba(255,255,255,0.85)] bg-[rgba(28,23,18,0.45)] text-white";
 
-// Renders the "Chụp ảnh" flow: live mirrored camera feed -> "Chụp" -> captured-still review ->
-// "Dùng ảnh này" / "Chụp lại". All getUserMedia/canvas logic lives in useCameraCapture
+// Renders the "take a photo" flow: live mirrored camera feed -> capture -> captured-still review
+// -> "use this photo" / "retake". All getUserMedia/canvas logic lives in useCameraCapture
 // (coder.md §4) — this component only reacts to its status and renders the matching UI.
 export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProps) {
+  const t = useTranslations("face");
+  const tCommon = useTranslations("common");
+  // Hints for the non-"streaming"/"captured" statuses, mirroring TryOnPage.tsx's wording style
+  // (AC2, AC6). Built inside the component because the text comes from the translations.
+  const statusHints: Partial<Record<string, string>> = {
+    idle: t("camera.starting"),
+    "requesting-camera": t("camera.requesting"),
+  };
   const videoRef = useRef<HTMLVideoElement>(null);
   const { status, errorMessage, start, stop, capture, retake } = useCameraCapture(videoRef);
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const capturedFileRef = useRef<File | null>(null);
 
-  // Open the camera as soon as this component mounts (i.e. as soon as "Chụp ảnh" is chosen).
+  // Open the camera as soon as this component mounts (i.e. as soon as "take a photo" is chosen).
   useEffect(() => {
     void start();
     // Intentionally run once on mount only — start()/stop() identity is not relevant here, the
@@ -55,7 +57,7 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
       capturedFileRef.current = file;
       setCapturedUrl(URL.createObjectURL(file));
     } catch {
-      setCaptureError("Không thể chụp ảnh từ camera. Vui lòng thử lại.");
+      setCaptureError(t("camera.captureFailed"));
     }
   }
 
@@ -83,7 +85,7 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
   }
 
   const isReviewing = status === "captured" && capturedUrl !== null;
-  const hint = captureError ?? (status !== "streaming" && !isReviewing ? (STATUS_HINTS[status] ?? errorMessage) : null);
+  const hint = captureError ?? (status !== "streaming" && !isReviewing ? (statusHints[status] ?? errorMessage) : null);
   const isErrorHint = Boolean(
     status === "camera-denied" || status === "unsupported" || status === "error" || captureError,
   );
@@ -102,7 +104,7 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
         // eslint-disable-next-line @next/next/no-img-element -- local blob object URL from the just-captured File, not a remote/optimizable image
         <img
           src={capturedUrl}
-          alt="Ảnh vừa chụp"
+          alt={t("camera.capturedAlt")}
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
@@ -110,20 +112,20 @@ export function FaceCameraCapture({ onConfirm, onCancel }: FaceCameraCaptureProp
         {isReviewing ? (
           <>
             <button type="button" className={OVERLAY_OUTLINE_BUTTON_CLASS} onClick={handleRetake}>
-              Chụp lại
+              {t("camera.retake")}
             </button>
             <button type="button" className="btn btn-primary btn-small" onClick={handleConfirm}>
-              Dùng ảnh này
+              {t("camera.usePhoto")}
             </button>
           </>
         ) : (
           <>
             <button type="button" className={OVERLAY_OUTLINE_BUTTON_CLASS} onClick={handleCancel}>
-              Hủy
+              {tCommon("cancel")}
             </button>
             {status === "streaming" && (
               <button type="button" className="btn btn-primary btn-small" onClick={handleCapture}>
-                Chụp
+                {t("camera.capture")}
               </button>
             )}
           </>

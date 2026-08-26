@@ -70,7 +70,7 @@ class RecommendationService:
         if request.limit is not None:
             scored = scored[: request.limit]
 
-        return RecommendResponse(items=scored)
+        return RecommendResponse(data=scored)
 
 
 def get_recommendation_service(

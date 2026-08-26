@@ -9,6 +9,10 @@ import uuid
 
 from django.db import models
 
+# Language codes are ISO 639-1; adding one is a single entry here.
+SUPPORTED_LANGUAGES = ["vi", "en"]
+DEFAULT_LANGUAGE = "vi"
+
 
 class TimestampedModel(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -65,6 +69,7 @@ class Profile(TimestampedModel):
     avatar_url = models.CharField(max_length=500, null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
+    preferred_language = models.CharField(max_length=10, default=DEFAULT_LANGUAGE)
 
     class Meta:
         db_table = "profiles"

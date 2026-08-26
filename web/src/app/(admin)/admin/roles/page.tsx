@@ -1,13 +1,15 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ApiError,
+    apiErrorDetails,
     createRole,
     deleteRole,
     listPermissions,
     listRoles,
     updateRole,
+    useApiError,
 } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -30,6 +32,10 @@ const FORM_FIELD = "mb-1.5 block text-[0.8rem] font-medium";
 // separate route, since a role is just {name, description, permissionIds} — small enough
 // not to need its own page the way the product form does.
 export default function AdminRolesPage() {
+    const t = useTranslations("admin");
+    const common = useTranslations("common");
+    const translateError = useApiError();
+
     const [roles, setRoles] = useState<Role[]>([]);
     const [permissions, setPermissions] = useState<Permission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +57,7 @@ export default function AdminRolesPage() {
 
         const token = getAccessToken();
         if (!token) {
-            setLoadError("Vui lòng đăng nhập lại.");
+            setLoadError(t("roles.sessionExpired"));
             setIsLoading(false);
             return;
         }
@@ -61,12 +67,10 @@ export default function AdminRolesPage() {
                 listRoles(token),
                 listPermissions(token),
             ]);
-            setRoles(rolesResponse.data);
-            setPermissions(permissionsResponse.data);
+            setRoles(rolesResponse);
+            setPermissions(permissionsResponse);
         } catch (err) {
-            setLoadError(
-                err instanceof ApiError ? err.message : "Không thể tải danh sách vai trò.",
-            );
+            setLoadError(translateError(err));
         } finally {
             setIsLoading(false);
         }
@@ -82,7 +86,7 @@ export default function AdminRolesPage() {
             const token = getAccessToken();
             if (!token) {
                 if (!cancelled) {
-                    setLoadError("Vui lòng đăng nhập lại.");
+                    setLoadError(t("roles.sessionExpired"));
                     setIsLoading(false);
                 }
                 return;
@@ -94,16 +98,12 @@ export default function AdminRolesPage() {
                     listPermissions(token),
                 ]);
                 if (!cancelled) {
-                    setRoles(rolesResponse.data);
-                    setPermissions(permissionsResponse.data);
+                    setRoles(rolesResponse);
+                    setPermissions(permissionsResponse);
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(
-                        err instanceof ApiError
-                            ? err.message
-                            : "Không thể tải danh sách vai trò.",
-                    );
+                    setLoadError(translateError(err));
                 }
             } finally {
                 if (!cancelled) setIsLoading(false);
@@ -115,7 +115,7 @@ export default function AdminRolesPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [t, translateError]);
 
     const term = searchInput.trim().toLowerCase();
     const filteredRoles = useMemo(
@@ -124,17 +124,13 @@ export default function AdminRolesPage() {
     );
 
     async function handleDelete(role: Role) {
-        if (
-            !window.confirm(
-                `Xoá vai trò "${role.name}"? Hành động này không thể hoàn tác.`,
-            )
-        ) {
+        if (!window.confirm(t("roles.deleteConfirm", { name: role.name }))) {
             return;
         }
 
         const token = getAccessToken();
         if (!token) {
-            setActionError("Vui lòng đăng nhập lại.");
+            setActionError(t("roles.sessionExpired"));
             return;
         }
 
@@ -144,11 +140,7 @@ export default function AdminRolesPage() {
             await deleteRole(token, role.id);
             await run();
         } catch (err) {
-            setActionError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Xoá vai trò thất bại.",
-            );
+            setActionError(translateError(err));
         } finally {
             setDeletingId(null);
         }
@@ -157,7 +149,7 @@ export default function AdminRolesPage() {
     return (
         <>
             <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
-                <div className="font-heading text-[1.35rem] font-semibold">Quản lý vai trò</div>
+                <div className="font-heading text-[1.35rem] font-semibold">{t("roles.title")}</div>
                 <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
                     AD
                 </div>
@@ -182,8 +174,8 @@ export default function AdminRolesPage() {
                         <input
                             type="search"
                             className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
-                            aria-label="Tìm vai trò"
-                            placeholder="Tìm vai trò…"
+                            aria-label={t("roles.searchLabel")}
+                            placeholder={t("roles.searchPlaceholder")}
                             value={searchInput}
                             onChange={(event) => setSearchInput(event.target.value)}
                         />
@@ -193,20 +185,20 @@ export default function AdminRolesPage() {
                         className="btn btn-primary"
                         onClick={() => setEditingRole(null)}
                     >
-                        + Thêm vai trò
+                        {t("roles.addRole")}
                     </button>
                 </div>
 
                 {actionError && <ErrorState message={actionError} />}
 
-                {isLoading && <LoadingState label="Đang tải vai trò..." />}
+                {isLoading && <LoadingState label={t("roles.loading")} />}
                 {!isLoading && loadError && <ErrorState message={loadError} />}
                 {!isLoading && !loadError && (
                     <div className="overflow-hidden rounded-lg border border-border bg-surface">
                         <div className={cn(ROW, ROW_HEAD)}>
-                            <span>Tên vai trò</span>
-                            <span>Mô tả</span>
-                            <span>Quyền</span>
+                            <span>{t("roles.columnName")}</span>
+                            <span>{t("roles.columnDescription")}</span>
+                            <span>{t("roles.columnPermissions")}</span>
                             <span></span>
                         </div>
                         {filteredRoles.map((role) => (
@@ -214,17 +206,17 @@ export default function AdminRolesPage() {
                                 <div>
                                     <div className="font-semibold">{role.name}</div>
                                 </div>
-                                <span>{role.description || "—"}</span>
+                                <span>{role.description || common("notAvailable")}</span>
                                 <span>
                                     {role.permissions.length > 0
                                         ? role.permissions.map((p) => p.code).join(", ")
-                                        : "Không có quyền nào"}
+                                        : t("roles.noPermissions")}
                                 </span>
                                 <div className="flex justify-end gap-2">
                                     <button
                                         type="button"
                                         className={cn(ICON_BTN, "text-text")}
-                                        aria-label={`Sửa ${role.name}`}
+                                        aria-label={t("roles.editAria", { name: role.name })}
                                         onClick={() => setEditingRole(role)}
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -235,7 +227,7 @@ export default function AdminRolesPage() {
                                     <button
                                         type="button"
                                         className={cn(ICON_BTN, "text-[#b4483a]")}
-                                        aria-label={`Xoá ${role.name}`}
+                                        aria-label={t("roles.deleteAria", { name: role.name })}
                                         disabled={deletingId === role.id}
                                         onClick={() => handleDelete(role)}
                                     >
@@ -249,7 +241,7 @@ export default function AdminRolesPage() {
                         ))}
                         {filteredRoles.length === 0 && (
                             <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
-                                Không tìm thấy vai trò nào khớp với &quot;{searchInput}&quot;.
+                                {t("roles.noResults", { term: searchInput })}
                             </div>
                         )}
                     </div>
@@ -279,6 +271,10 @@ interface RoleFormModalProps {
 }
 
 function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalProps) {
+    const t = useTranslations("admin");
+    const common = useTranslations("common");
+    const translateError = useApiError();
+
     const isEditing = role !== null;
 
     const [name, setName] = useState(role?.name ?? "");
@@ -287,6 +283,7 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
         () => new Set(role?.permissions.map((p) => p.id) ?? []),
     );
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     function togglePermission(id: string) {
@@ -304,18 +301,19 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
     async function handleSubmit() {
         const trimmedName = name.trim();
         if (!trimmedName) {
-            setSubmitError("Vui lòng nhập tên vai trò.");
+            setSubmitError(t("roles.form.nameRequired"));
             return;
         }
 
         const token = getAccessToken();
         if (!token) {
-            setSubmitError("Bạn cần đăng nhập lại để thực hiện thao tác này.");
+            setSubmitError(t("roles.form.loginRequired"));
             return;
         }
 
         setIsSubmitting(true);
         setSubmitError(null);
+        setFieldErrors({});
         try {
             const payload = {
                 name: trimmedName,
@@ -331,11 +329,8 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
 
             await onSaved();
         } catch (err) {
-            setSubmitError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Không thể lưu vai trò. Vui lòng thử lại.",
-            );
+            setSubmitError(translateError(err));
+            setFieldErrors(apiErrorDetails(err));
         } finally {
             setIsSubmitting(false);
         }
@@ -356,48 +351,58 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
             >
                 <div className="mb-3 flex items-center justify-between gap-4">
                     <h2 id="role-form-heading" className="font-heading text-[1.3rem] text-text">
-                        {isEditing ? "Sửa vai trò" : "Thêm vai trò"}
+                        {isEditing ? t("roles.form.editHeading") : t("roles.form.createHeading")}
                     </h2>
                     <button
                         type="button"
                         className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[1.4rem] leading-none text-text-muted hover:bg-[rgba(43,36,32,0.06)] hover:text-text"
                         onClick={onClose}
-                        aria-label="Đóng"
+                        aria-label={common("close")}
                     >
                         ×
                     </button>
                 </div>
 
                 <div className={FORM_FIELD}>
-                    <label htmlFor="role-name">Tên vai trò</label>
+                    <label htmlFor="role-name">{t("roles.form.nameLabel")}</label>
                     <input
                         id="role-name"
                         type="text"
                         className="input mb-4"
                         value={name}
                         onChange={(event) => setName(event.target.value)}
-                        placeholder="VD: STAFF"
+                        placeholder={t("roles.form.namePlaceholder")}
                     />
+                    {fieldErrors.name?.map((msg) => (
+                        <p key={msg} role="alert" className="field-error mb-4">
+                            {msg}
+                        </p>
+                    ))}
                 </div>
 
                 <div className={FORM_FIELD}>
-                    <label htmlFor="role-description">Mô tả</label>
+                    <label htmlFor="role-description">{t("roles.form.descriptionLabel")}</label>
                     <textarea
                         id="role-description"
                         className="input mb-4 resize-y"
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
-                        placeholder="Mô tả ngắn về vai trò này"
+                        placeholder={t("roles.form.descriptionPlaceholder")}
                         rows={2}
                     />
+                    {fieldErrors.description?.map((msg) => (
+                        <p key={msg} role="alert" className="field-error mb-4">
+                            {msg}
+                        </p>
+                    ))}
                 </div>
 
-                <section aria-label="Chọn quyền" className="mb-5">
+                <section aria-label={t("roles.form.selectPermissionsLabel")} className="mb-5">
                     <p className="mb-[0.6rem] text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
-                        Quyền
+                        {t("roles.form.permissionsLabel")}
                     </p>
                     {permissions.length === 0 ? (
-                        <p className="my-[1em]">Chưa có quyền nào trong hệ thống.</p>
+                        <p className="my-[1em]">{t("roles.form.noPermissionsInSystem")}</p>
                     ) : (
                         <ul className="grid gap-2.5">
                             {permissions.map((permission) => (
@@ -426,6 +431,11 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                             ))}
                         </ul>
                     )}
+                    {fieldErrors.permissionIds?.map((msg) => (
+                        <p key={msg} role="alert" className="field-error mt-2">
+                            {msg}
+                        </p>
+                    ))}
                 </section>
 
                 {submitError && (
@@ -441,7 +451,7 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                         onClick={onClose}
                         disabled={isSubmitting}
                     >
-                        Hủy
+                        {common("cancel")}
                     </button>
                     <button
                         type="button"
@@ -449,7 +459,7 @@ function RoleFormModal({ role, permissions, onClose, onSaved }: RoleFormModalPro
                         onClick={handleSubmit}
                         disabled={isSubmitting}
                     >
-                        {isSubmitting ? "Đang lưu..." : "Lưu vai trò"}
+                        {isSubmitting ? common("saving") : t("roles.form.submit")}
                     </button>
                 </div>
             </div>

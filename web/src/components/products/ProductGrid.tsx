@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { Product } from "@/types/product";
 import { ProductCard } from "./ProductCard";
 
@@ -6,8 +7,10 @@ interface ProductGridProps {
 }
 
 export function ProductGrid({ products }: ProductGridProps) {
+  const t = useTranslations("products");
+
   if (products.length === 0) {
-    return <p className="my-[1em] text-text-muted">Không tìm thấy sản phẩm nào.</p>;
+    return <p className="my-[1em] text-text-muted">{t("empty")}</p>;
   }
 
   return (

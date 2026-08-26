@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getCart } from "@/lib/api";
+import { getCart, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import type { Cart } from "@/types/cart";
 
@@ -26,6 +26,7 @@ interface UseCartResult {
 // own getAccessToken() use) rather than requiring every caller to pass one in. Skips the fetch
 // entirely when there's no token (logged-out), since cart endpoints require auth.
 export function useCart(): UseCartResult {
+  const translateError = useApiError();
   const [cart, setCart] = useState<Cart | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export function useCart(): UseCartResult {
       const response = await getCart(token);
       setCart(response);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể tải giỏ hàng.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +73,7 @@ export function useCart(): UseCartResult {
         if (!cancelled) setCart(response);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải giỏ hàng.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -93,7 +94,7 @@ export function useCart(): UseCartResult {
       window.removeEventListener("cart-change", handleCartChange);
       window.removeEventListener("auth-change", handleCartChange);
     };
-  }, []);
+  }, [translateError]);
 
   return { cart, totalQuantity: cart?.totalQuantity ?? 0, isLoading, error, refetch: run };
 }

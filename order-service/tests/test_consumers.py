@@ -40,7 +40,7 @@ class TestStockReserved:
 
         session.refresh(order)
         assert order.status == "AWAITING_PAYMENT"
-        assert order.status_histories[-1].note == "Đã giữ hàng thành công, chờ thanh toán"
+        assert order.status_histories[-1].note == "Stock reserved, awaiting payment"
 
         events = _outbox(session)
         assert [e.routing_key for e in events] == ["payment.create.requested"]
@@ -95,10 +95,12 @@ class TestStockReserved:
 class TestStockReserveRejected:
     def test_pending_is_cancelled_with_reason(self, session):
         order = create_order(session, user_id=USER, status="PENDING")
-        saga_events.handle_stock_reserve_rejected(session, str(order.id), "Hết hàng size 52")
+        saga_events.handle_stock_reserve_rejected(
+            session, str(order.id), "Out of stock for size 52"
+        )
         session.refresh(order)
         assert order.status == "CANCELLED"
-        assert order.status_histories[-1].note == "Hết hàng size 52"
+        assert order.status_histories[-1].note == "Out of stock for size 52"
         assert _outbox(session) == []  # nothing reserved → no release
         assert _stages(session, order.id) == ["STOCK_RESERVE_REJECTED"]
 
@@ -106,12 +108,12 @@ class TestStockReserveRejected:
         order = create_order(session, user_id=USER, status="PENDING")
         saga_events.handle_stock_reserve_rejected(session, str(order.id), None)
         session.refresh(order)
-        assert order.status_histories[-1].note == "Không đủ hàng trong kho"
+        assert order.status_histories[-1].note == "Not enough stock available"
 
     @pytest.mark.parametrize("status", ["AWAITING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED"])
     def test_ignored_in_other_states(self, session, status):
         order = create_order(session, user_id=USER, status=status)
-        saga_events.handle_stock_reserve_rejected(session, str(order.id), "lý do")
+        saga_events.handle_stock_reserve_rejected(session, str(order.id), "some reason")
         session.refresh(order)
         assert order.status == status
 
@@ -145,7 +147,7 @@ class TestPaymentCompleted:
         assert order.payment_status == "PAID"
         assert str(order.payment_id) == payment_id
         assert order.transaction_code == "TXN-000042"
-        assert order.status_histories[-1].note == "Thanh toán thành công"
+        assert order.status_histories[-1].note == "Payment succeeded"
         assert _stages(session, order.id) == ["PAYMENT_COMPLETED"]
         # only the ordered variant is removed from the cart
         cart = cart_repo.load(USER)
@@ -193,11 +195,11 @@ class TestPaymentFailed:
         order = create_order(
             session, user_id=USER, status="AWAITING_PAYMENT", items=[(vid, 2, "50000.00")]
         )
-        saga_events.handle_payment_failed(session, str(order.id), "Thẻ bị từ chối")
+        saga_events.handle_payment_failed(session, str(order.id), "Card declined")
         session.refresh(order)
         assert order.status == "CANCELLED"
         assert order.payment_status == "FAILED"
-        assert order.status_histories[-1].note == "Thẻ bị từ chối"
+        assert order.status_histories[-1].note == "Card declined"
         events = _outbox(session)
         assert [e.routing_key for e in events] == ["stock.release.requested"]
         assert _stages(session, order.id) == ["PAYMENT_FAILED", "STOCK_RELEASE_REQUESTED"]
@@ -206,12 +208,12 @@ class TestPaymentFailed:
         order = create_order(session, user_id=USER, status="AWAITING_PAYMENT")
         saga_events.handle_payment_failed(session, str(order.id), None)
         session.refresh(order)
-        assert order.status_histories[-1].note == "Thanh toán thất bại"
+        assert order.status_histories[-1].note == "Payment failed"
 
     @pytest.mark.parametrize("status", ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"])
     def test_ignored_in_other_states(self, session, status):
         order = create_order(session, user_id=USER, status=status)
-        saga_events.handle_payment_failed(session, str(order.id), "lý do")
+        saga_events.handle_payment_failed(session, str(order.id), "some reason")
         session.refresh(order)
         assert order.status == status
         assert _outbox(session) == []
@@ -227,7 +229,7 @@ class TestDeadLetterLog:
         assert log.source_service == "MESSAGE_BROKER"
         assert (
             log.message
-            == "Message 'payment.completed' bị chuyển vào dead-letter queue sau 10 lần redeliver"
+            == "Message 'payment.completed' was dead-lettered after 10 redeliveries"
         )
 
     def test_unknown_order_is_ignored(self, session):

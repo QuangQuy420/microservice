@@ -36,13 +36,15 @@ class TestDays:
         )
         res = client.get("/api/v1/admin/saga-logs/days")
         assert res.status_code == 200
-        assert res.json() == [
-            {"date": "2026-08-12", "totalCount": 1, "hasWarning": True},
-            {"date": "2026-08-10", "totalCount": 2, "hasWarning": False},
-        ]
+        assert res.json() == {
+            "data": [
+                {"date": "2026-08-12", "totalCount": 1, "hasWarning": True},
+                {"date": "2026-08-10", "totalCount": 2, "hasWarning": False},
+            ]
+        }
 
     def test_empty(self, client):
-        assert client.get("/api/v1/admin/saga-logs/days").json() == []
+        assert client.get("/api/v1/admin/saga-logs/days").json() == {"data": []}
 
 
 class TestDayDetail:
@@ -63,7 +65,7 @@ class TestDayDetail:
 
         res = client.get("/api/v1/admin/saga-logs/days/2026-08-10")
         assert res.status_code == 200
-        rows = res.json()
+        rows = res.json()["data"]
         assert [r["orderId"] for r in rows] == [str(o2.id), str(o1.id)]
         assert rows[0]["orderCode"] == o2.order_code
         assert rows[0]["entryCount"] == 1
@@ -75,7 +77,9 @@ class TestDayDetail:
     def test_invalid_date(self, client):
         res = client.get("/api/v1/admin/saga-logs/days/not-a-date")
         assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
+        error = res.json()["error"]
+        assert error["code"] == "MALFORMED_REQUEST"
+        assert error["details"]["date"] == ["Invalid date (expected format yyyy-MM-dd)"]
 
 
 class TestOrderLogs:
@@ -84,7 +88,7 @@ class TestOrderLogs:
         _log(session, order, "STOCK_RESERVE_REQUESTED", occurred_at=datetime(2026, 8, 10, 9, 1, 0))
         _log(session, order, "CREATED", occurred_at=datetime(2026, 8, 10, 9, 0, 0))
         res = client.get(f"/api/v1/admin/saga-logs/orders/{order.id}")
-        rows = res.json()
+        rows = res.json()["data"]
         assert [r["stage"] for r in rows] == ["CREATED", "STOCK_RESERVE_REQUESTED"]
         assert set(rows[0].keys()) == {
             "stage",
@@ -100,4 +104,4 @@ class TestOrderLogs:
     def test_unknown_order_returns_empty_200(self, client):
         res = client.get(f"/api/v1/admin/saga-logs/orders/{uuid.uuid4()}")
         assert res.status_code == 200
-        assert res.json() == []
+        assert res.json() == {"data": []}

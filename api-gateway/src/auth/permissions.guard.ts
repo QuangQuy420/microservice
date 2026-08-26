@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import { apiError } from '../common/api-error';
 import { UsersProxyService } from '../services/users-proxy.service';
 import { AuthenticatedUser } from './jwt.guard';
 import { PERMISSIONS_KEY } from './permissions.decorator';
@@ -48,7 +49,9 @@ export class PermissionsGuard implements CanActivate {
     );
 
     if (!hasPermission) {
-      throw new ForbiddenException('Không đủ quyền truy cập');
+      throw new ForbiddenException(
+        apiError('FORBIDDEN', 'Insufficient permissions'),
+      );
     }
 
     return true;

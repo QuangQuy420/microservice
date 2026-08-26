@@ -10,17 +10,14 @@ from .conftest import login, register
 
 pytestmark = pytest.mark.django_db
 
-INVALID_CREDENTIALS_MESSAGE = "Email, username hoặc mật khẩu không chính xác"
+INVALID_CREDENTIALS_MESSAGE = "Email, username or password is incorrect"
 
 
 def test_login_with_email(client):
     register(client)
     response = login(client, "user1@example.com")
     assert response.status_code == 200
-    body = response.data
-    assert body["success"] is True
-    assert body["message"] == "Đăng nhập thành công"
-    data = body["data"]
+    data = response.data["data"]
     assert set(data.keys()) == {"accessToken", "tokenType", "expiresIn", "user"}
     assert data["tokenType"] == "Bearer"
     assert data["expiresIn"] == 86400  # 1d config (ms) -> seconds
@@ -49,16 +46,17 @@ def test_login_wrong_password(client):
     response = login(client, "user1@example.com", "WrongPass1")
     assert response.status_code == 401
     assert response.data == {
-        "success": False,
-        "message": INVALID_CREDENTIALS_MESSAGE,
-        "data": None,
+        "error": {
+            "code": "INVALID_CREDENTIALS",
+            "message": INVALID_CREDENTIALS_MESSAGE,
+        }
     }
 
 
 def test_login_unknown_identifier(client):
     response = login(client, "ghost@example.com")
     assert response.status_code == 401
-    assert response.data["message"] == INVALID_CREDENTIALS_MESSAGE
+    assert response.data["error"]["code"] == "INVALID_CREDENTIALS"
 
 
 def test_login_inactive_user_same_message(client):
@@ -66,14 +64,14 @@ def test_login_inactive_user_same_message(client):
     User.objects.filter(username="user_one").update(status="INACTIVE")
     response = login(client, "user_one")
     assert response.status_code == 401
-    assert response.data["message"] == INVALID_CREDENTIALS_MESSAGE
+    assert response.data["error"]["code"] == "INVALID_CREDENTIALS"
 
 
 def test_login_validation(client):
     response = client.post("/api/v1/auth/login", {"identifier": "x"})
-    assert response.status_code == 400
-    assert response.data["message"] == "Dữ liệu đầu vào không hợp lệ"
-    assert "password" in response.data["data"]
+    assert response.status_code == 422
+    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    assert "password" in response.data["error"]["details"]
 
 
 def test_jwt_contents_and_gateway_interop(client):

@@ -5,10 +5,7 @@ import { createCategory, deleteCategory, getCategories, updateCategory } from "@
 
 export default function AdminCategoriesPage() {
   return <CatalogManagementPage config={{
-    title: "Quản lý danh mục",
-    searchLabel: "Tìm danh mục…",
-    createLabel: "Thêm danh mục",
-    resourceLabel: "danh mục",
+    resource: "categories",
     getItems: getCategories,
     create: createCategory,
     update: updateCategory,

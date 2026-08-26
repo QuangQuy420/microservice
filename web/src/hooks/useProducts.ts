@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getProducts } from "@/lib/api";
+import { getProducts, useApiError } from "@/lib/api";
 import type { Product, ProductListParams } from "@/types/product";
 
 interface UseProductsResult {
@@ -17,8 +17,9 @@ export function useProducts(params: ProductListParams): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const translateError = useApiError();
 
-  const { categoryId, brandId, frameShape, page, limit, search, minPrice, maxPrice, includeAllStatuses } =
+  const { categoryId, brandId, frameShape, page, pageSize, search, minPrice, maxPrice, includeAllStatuses } =
     params;
 
   async function run() {
@@ -30,15 +31,15 @@ export function useProducts(params: ProductListParams): UseProductsResult {
         brandId,
         frameShape,
         page,
-        limit,
+        pageSize,
         search,
         minPrice,
         maxPrice,
         includeAllStatuses,
       });
-      setProducts(response.items);
+      setProducts(response.data);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load products.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }
@@ -56,16 +57,16 @@ export function useProducts(params: ProductListParams): UseProductsResult {
           brandId,
           frameShape,
           page,
-          limit,
+          pageSize,
           search,
           minPrice,
           maxPrice,
           includeAllStatuses,
         });
-        if (!cancelled) setProducts(response.items);
+        if (!cancelled) setProducts(response.data);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Failed to load products.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -77,7 +78,7 @@ export function useProducts(params: ProductListParams): UseProductsResult {
     return () => {
       cancelled = true;
     };
-  }, [categoryId, brandId, frameShape, page, limit, search, minPrice, maxPrice, includeAllStatuses]);
+  }, [categoryId, brandId, frameShape, page, pageSize, search, minPrice, maxPrice, includeAllStatuses, translateError]);
 
   return { products, isLoading, error, refetch: run };
 }

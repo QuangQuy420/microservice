@@ -17,8 +17,6 @@ def test_internal_permissions_for_admin(client):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["success"] is True
-    assert body["message"] == "Lấy danh sách quyền của người dùng thành công"
     assert set(body["data"]["permissions"]) == {
         "product:manage",
         "role:manage",
@@ -37,7 +35,7 @@ def test_internal_permissions_for_customer_is_empty(client, customer):
     assert response.json()["data"] == {"permissions": []}
 
 
-def test_internal_wrong_key_is_403_with_exact_envelope(client):
+def test_internal_wrong_key_is_403_with_error_envelope(client):
     admin = User.objects.get(username="admin")
     response = client.get(
         f"/internal/v1/users/{admin.id}/permissions",
@@ -45,9 +43,10 @@ def test_internal_wrong_key_is_403_with_exact_envelope(client):
     )
     assert response.status_code == 403
     assert response.json() == {
-        "success": False,
-        "message": "Yêu cầu nội bộ không hợp lệ",
-        "data": None,
+        "error": {
+            "code": "INVALID_INTERNAL_KEY",
+            "message": "Invalid internal request",
+        }
     }
 
 
@@ -55,7 +54,7 @@ def test_internal_missing_key_is_403(client):
     admin = User.objects.get(username="admin")
     response = client.get(f"/internal/v1/users/{admin.id}/permissions")
     assert response.status_code == 403
-    assert response.json()["message"] == "Yêu cầu nội bộ không hợp lệ"
+    assert response.json()["error"]["code"] == "INVALID_INTERNAL_KEY"
 
 
 def test_internal_unknown_user_is_404(client):
@@ -63,7 +62,7 @@ def test_internal_unknown_user_is_404(client):
         f"/internal/v1/users/{uuid.uuid4()}/permissions", **GOOD_KEY
     )
     assert response.status_code == 404
-    assert response.json()["message"] == "Không tìm thấy người dùng"
+    assert response.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
 def test_internal_key_matches_settings(client):

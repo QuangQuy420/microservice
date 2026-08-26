@@ -1,26 +1,26 @@
 """Idempotent seed data:
 
-- Roles: CUSTOMER ("Khách hàng"), ADMIN ("Quản trị viên")
+- Roles: CUSTOMER ("Customer"), ADMIN ("Administrator")
 - The 6 permission codes; ADMIN gets all of them
 - Admin user admin@example.com / admin with the exact bcrypt hash from the
-  spec (password: Admin@123), ACTIVE, profile "Quản trị viên", role ADMIN
+  spec (password: Admin@123), ACTIVE, profile "Administrator", role ADMIN
 """
 from django.db import migrations
 
 ADMIN_PASSWORD_HASH = "$2b$12$1UjHn8ti8Y.Wqi//fNBQ4uGmrgAN0p9RE.C8nMzTPjO2c0y6sRXGO"
 
 PERMISSIONS = [
-    ("product:manage", "Quản lý sản phẩm"),
-    ("role:manage", "Quản lý vai trò"),
-    ("user:manage-roles", "Quản lý vai trò người dùng"),
-    ("order:manage", "Quản lý đơn hàng"),
-    ("saga-settings:manage", "Quản lý cấu hình saga"),
-    ("catalog:manage", "Quản lý danh mục"),
+    ("product:manage", "Manage products"),
+    ("role:manage", "Manage roles"),
+    ("user:manage-roles", "Manage user roles"),
+    ("order:manage", "Manage orders"),
+    ("saga-settings:manage", "Manage saga settings"),
+    ("catalog:manage", "Manage catalog"),
 ]
 
 ROLES = [
-    ("CUSTOMER", "Khách hàng"),
-    ("ADMIN", "Quản trị viên"),
+    ("CUSTOMER", "Customer"),
+    ("ADMIN", "Administrator"),
 ]
 
 
@@ -61,7 +61,7 @@ def seed(apps, schema_editor):
         },
     )
     Profile.objects.get_or_create(
-        user_id=admin.id, defaults={"full_name": "Quản trị viên"}
+        user_id=admin.id, defaults={"full_name": "Administrator"}
     )
     UserRole.objects.get_or_create(user_id=admin.id, role_id=admin_role.id)
 

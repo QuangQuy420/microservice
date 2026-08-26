@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 
 export interface AuthenticatedUser {
@@ -39,7 +40,9 @@ export class JwtGuard implements CanActivate {
     const token = this.extractToken(request);
 
     if (!token) {
-      throw new UnauthorizedException('Thiếu token xác thực (bearer token)');
+      throw new UnauthorizedException(
+        apiError('MISSING_TOKEN', 'Missing authentication token (bearer token)'),
+      );
     }
 
     const jwtSecret = this.configService.get<AppConfig>('app')!.jwtSecret;
@@ -53,7 +56,9 @@ export class JwtGuard implements CanActivate {
       };
       return true;
     } catch {
-      throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(
+        apiError('INVALID_TOKEN', 'Invalid or expired token'),
+      );
     }
   }
 

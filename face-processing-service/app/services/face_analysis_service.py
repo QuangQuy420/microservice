@@ -98,13 +98,13 @@ class FaceAnalysisService:
         """
         row = await self._face_analysis_repo.get_by_id(analysis_id)
         if row is None or row.user_id != user_id:
-            raise HistoryItemNotFoundError("Không tìm thấy lịch sử phân tích.")
+            raise HistoryItemNotFoundError("Face analysis not found.")
 
         try:
             self._image_storage.delete(row.s3_key)
         except (ClientError, BotoCoreError):
             logger.warning(
-                "Không thể xóa ảnh %s khỏi bộ nhớ đối tượng cho lịch sử %s",
+                "Could not delete image %s from object storage for analysis %s",
                 row.s3_key,
                 analysis_id,
                 exc_info=True,

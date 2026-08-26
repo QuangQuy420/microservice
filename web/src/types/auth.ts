@@ -20,15 +20,20 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
-export interface LoginData {
-  accessToken?: string;
-  token?: string;
-  tokenType?: string;
-  expiresIn?: number;
+// Mirrors user-service's user_response (users/presenters.py) — the account summary POST
+// /auth/login returns alongside the token, and the body POST /auth/register returns.
+export interface AuthUser {
+  id: string;
+  email: string;
+  username: string;
+  roles: string[];
+  status: string;
 }
 
-export interface ApiResponse<T> {
-  success?: boolean;
-  message?: string;
-  data: T;
+// Mirrors the `data` of POST /auth/login (user-service views/auth.py LoginView).
+export interface LoginData {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: AuthUser;
 }

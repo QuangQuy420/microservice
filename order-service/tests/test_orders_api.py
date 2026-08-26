@@ -23,18 +23,14 @@ class TestListOrders:
         res = client.get(f"/api/v1/users/{USER}/orders")
         assert res.status_code == 200
         body = res.json()
-        assert body["totalElements"] == 2
-        assert [o["id"] for o in body["content"]] == [str(o_new.id), str(o_old.id)]
-        assert body["page"] == 0
-        assert body["size"] == 20
-        assert body["totalPages"] == 1
-        assert body["first"] is True
-        assert body["last"] is True
+        assert set(body.keys()) == {"data", "meta"}
+        assert [o["id"] for o in body["data"]] == [str(o_new.id), str(o_old.id)]
+        assert body["meta"] == {"page": 1, "pageSize": 20, "total": 2}
 
     def test_summary_shape(self, client, session):
         order = create_order(session, user_id=USER)
         res = client.get(f"/api/v1/users/{USER}/orders")
-        row = res.json()["content"][0]
+        row = res.json()["data"][0]
         assert set(row.keys()) == {
             "id",
             "orderCode",
@@ -52,31 +48,33 @@ class TestListOrders:
         confirmed = create_order(session, user_id=USER, status="CONFIRMED")
         res = client.get(f"/api/v1/users/{USER}/orders", params={"status": "CONFIRMED"})
         body = res.json()
-        assert body["totalElements"] == 1
-        assert body["content"][0]["id"] == str(confirmed.id)
+        assert body["meta"]["total"] == 1
+        assert body["data"][0]["id"] == str(confirmed.id)
 
     def test_paging(self, client, session):
         now = now_vn()
         for i in range(5):
             create_order(session, user_id=USER, created_at=now - timedelta(minutes=i))
-        res = client.get(f"/api/v1/users/{USER}/orders", params={"page": 1, "size": 2})
+        res = client.get(f"/api/v1/users/{USER}/orders", params={"page": 2, "pageSize": 2})
         body = res.json()
-        assert body["totalElements"] == 5
-        assert body["totalPages"] == 3
-        assert len(body["content"]) == 2
-        assert body["first"] is False
-        assert body["last"] is False
+        assert body["meta"] == {"page": 2, "pageSize": 2, "total": 5}
+        assert len(body["data"]) == 2
 
-    def test_negative_page(self, client):
-        res = client.get(f"/api/v1/users/{USER}/orders", params={"page": -1})
+    @pytest.mark.parametrize("page", [0, -1])
+    def test_page_below_one(self, client, page):
+        res = client.get(f"/api/v1/users/{USER}/orders", params={"page": page})
         assert res.status_code == 400
-        assert res.json()["message"] == "Trang không được nhỏ hơn 0"
+        error = res.json()["error"]
+        assert error["code"] == "PAGE_INVALID"
+        assert error["message"] == "Page must be 1 or greater"
 
-    @pytest.mark.parametrize("size", [0, 101])
-    def test_size_out_of_bounds(self, client, size):
-        res = client.get(f"/api/v1/users/{USER}/orders", params={"size": size})
+    @pytest.mark.parametrize("page_size", [0, 101])
+    def test_page_size_out_of_bounds(self, client, page_size):
+        res = client.get(f"/api/v1/users/{USER}/orders", params={"pageSize": page_size})
         assert res.status_code == 400
-        assert res.json()["message"] == "Kích thước trang phải từ 1 đến 100"
+        error = res.json()["error"]
+        assert error["code"] == "PAGE_SIZE_INVALID"
+        assert error["message"] == "Page size must be between 1 and 100"
 
 
 class TestOrderDetail:
@@ -84,7 +82,7 @@ class TestOrderDetail:
         order = create_order(session, user_id=USER)
         res = client.get(f"/api/v1/users/{USER}/orders/{order.id}")
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert set(body.keys()) == {
             "id",
             "orderCode",
@@ -126,15 +124,17 @@ class TestOrderDetail:
         order = create_order(session)  # other user
         res = client.get(f"/api/v1/users/{USER}/orders/{order.id}")
         assert res.status_code == 404
-        assert res.json()["message"] == "Không tìm thấy đơn hàng"
+        assert res.json()["error"]["code"] == "ORDER_NOT_FOUND"
 
     def test_unknown_order(self, client, session):
         res = client.get(f"/api/v1/users/{USER}/orders/{uuid.uuid4()}")
         assert res.status_code == 404
-        assert res.json()["message"] == "Không tìm thấy đơn hàng"
+        assert res.json()["error"]["message"] == "Order not found"
 
 
 class TestCancelOrder:
+    # Cancellation reasons are user-authored input (fixture data) — kept Vietnamese
+    # on purpose: they must survive verbatim into the status history.
     def _cancel(self, client, order, reason="Đổi ý không mua nữa"):
         return client.post(
             f"/api/v1/users/{USER}/orders/{order.id}/cancel", json={"reason": reason}
@@ -145,7 +145,7 @@ class TestCancelOrder:
         order = create_order(session, user_id=USER, status=status)
         res = self._cancel(client, order)
         assert res.status_code == 200
-        assert res.json()["status"] == "CANCELLED"
+        assert res.json()["data"]["status"] == "CANCELLED"
 
     @pytest.mark.parametrize(
         "status", ["PROCESSING", "SHIPPING", "DELIVERED", "COMPLETED", "CANCELLED"]
@@ -154,12 +154,14 @@ class TestCancelOrder:
         order = create_order(session, user_id=USER, status=status)
         res = self._cancel(client, order)
         assert res.status_code == 400
-        assert res.json()["message"] == f"Không thể hủy đơn ở trạng thái {status}"
+        error = res.json()["error"]
+        assert error["code"] == "CANCEL_NOT_ALLOWED"
+        assert error["message"] == f"Cannot cancel an order in status {status}"
 
     def test_history_note_is_reason(self, client, session):
         order = create_order(session, user_id=USER, status="PENDING")
         res = self._cancel(client, order, reason="Muốn đổi màu khác")
-        histories = res.json()["statusHistories"]
+        histories = res.json()["data"]["statusHistories"]
         assert histories[-1]["status"] == "CANCELLED"
         assert histories[-1]["note"] == "Muốn đổi màu khác"
 
@@ -185,9 +187,10 @@ class TestCancelOrder:
     def test_reason_required(self, client, session):
         order = create_order(session, user_id=USER, status="PENDING")
         res = client.post(f"/api/v1/users/{USER}/orders/{order.id}/cancel", json={})
-        assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
-        assert "reason" in res.json()["validationErrors"]
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert error["details"]["reason"] == ["Cancellation reason is required"]
 
     def test_cancel_scoped_by_user(self, client, session):
         order = create_order(session, status="PENDING")  # other user

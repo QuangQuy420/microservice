@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { useAvailableFrameShapes } from "@/hooks/useAvailableFrameShapes";
@@ -29,6 +30,7 @@ interface FilterUpdate {
 // Reads/writes filters via the URL search params so filtered views are shareable/bookmarkable
 // and the browser back button works as expected.
 export function ProductListPage() {
+  const t = useTranslations("products");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -119,22 +121,21 @@ export function ProductListPage() {
       <section className="flex flex-wrap items-center gap-10 pt-6 pb-10">
         <div className="min-w-[280px] flex-[1_1_380px]">
           <p className="mb-[0.9rem] text-[0.8rem] font-semibold tracking-[0.12em] text-text-muted uppercase">
-            Bộ sưu tập kính mắt
+            {t("heroEyebrow")}
           </p>
           <h1
             id="catalog-heading"
             className="mb-[1.1rem] font-heading text-[clamp(1.9rem,4vw,3rem)] leading-[1.15] font-semibold"
           >
-            Tìm gọng kính
+            {t("heroTitleLine1")}
             <br />
-            phù hợp với khuôn mặt bạn
+            {t("heroTitleLine2")}
           </h1>
           <p className="mb-7 max-w-[460px] text-base leading-[1.6] text-text-secondary">
-            Tải lên 1 ảnh chân dung, chúng tôi sẽ phân tích dáng khuôn mặt của bạn và gợi ý những
-            gọng kính phù hợp nhất — sau đó thử ngay trên trình duyệt trước khi mua.
+            {t("heroDescription")}
           </p>
           <Link href="/face-analysis" className="btn btn-primary">
-            Bắt đầu phân tích khuôn mặt
+            {t("heroCta")}
           </Link>
         </div>
         <div className="aspect-[4/3] min-w-[220px] flex-[1_1_320px] overflow-hidden rounded-[6px] bg-[#ede6d8]">
@@ -160,8 +161,8 @@ export function ProductListPage() {
           <input
             type="search"
             className="w-full rounded-full border border-border bg-surface py-3 pr-4 pl-10 font-body text-[0.9rem] text-text"
-            aria-label="Tìm sản phẩm"
-            placeholder="Tìm theo tên hoặc kiểu gọng kính"
+            aria-label={t("searchLabel")}
+            placeholder={t("searchPlaceholder")}
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
@@ -186,7 +187,7 @@ export function ProductListPage() {
             })
           }
         />
-        {isLoading && <LoadingState label="Đang tải sản phẩm..." />}
+        {isLoading && <LoadingState label={t("loading")} />}
         {!isLoading && error && <ErrorState message={error} />}
         {!isLoading && !error && <ProductGrid products={products} />}
       </section>

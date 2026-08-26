@@ -1,6 +1,6 @@
 # order-service — Functional Specification
 
-The implementation must match every externally visible detail (paths, JSON keys, status codes, Vietnamese messages, RabbitMQ contract) because api-gateway, web, product-service and payment-service depend on them.
+The implementation must match every externally visible detail (paths, JSON keys, status codes, the response envelope, the machine-readable `error.code` values, RabbitMQ contract) because api-gateway, web, product-service and payment-service depend on them. Human-readable text is **English** and developer-facing only — clients translate by `error.code` and author their own success messages; the exact English wording is a fallback, not a frozen contract.
 
 Stack: FastAPI, Postgres (Alembic), Redis (cart), RabbitMQ.
 
@@ -47,28 +47,74 @@ Cart: Redis key `cart:<userId>`, JSON value, TTL 7 days (reset on each save).
 Cart: `userId`, `items[]`, `createdAt`, `updatedAt`; derived `totalQuantity`, `totalAmount`.
 CartItem: `productId, variantId, productName, skuVariant, color, colorHex, size, productImageUrl, basePrice, extraPrice, unitPrice, quantity`; derived `subtotal = unitPrice*quantity`.
 
-## 3. Error envelope
+## 3. Response envelope & errors
+
+One envelope for every response (health excepted):
+
+| Case | Status | Body |
+|---|---|---|
+| Success, single resource | 200 / 201 | `{"data": <object｜null>}` |
+| Success, unpaginated list | 200 | `{"data": [ ... ]}` |
+| Success, paginated list | 200 | `{"data": [ ... ], "meta": {"page": 1, "pageSize": 20, "total": 128}}` |
+| Success, no body | 204 | empty |
+| Error | 4xx / 5xx | `{"error": {"code": "...", "message": "...", "details"?: {...}}}` |
+
+- There is **no success `message` slot** — the client owns all success text.
+- `error.code` is the stable machine-readable contract; `error.message` is an English developer-facing fallback (`app/messages.py`).
+- `error.details` appears only when there are field errors and is always `{"<field>": ["<msg>", ...]}` — **all** messages for that field, always an array.
+- A delete that has a useful body stays **200** with that body (`DELETE /carts/{userId}/items/{variantId}` → recomputed cart). A body-less delete is **204** (`DELETE /carts/{userId}`).
+- Field validation → **422** `VALIDATION_ERROR`. An unparseable JSON body → **400** `MALFORMED_REQUEST` (`"Request body is not valid JSON"`); a malformed UUID in a path/header, or a bad `yyyy-MM-dd` path segment → **400** `MALFORMED_REQUEST` with `details`; a missing required header → **400** `MISSING_HEADER`. Business-rule failures keep **400** with their own code.
+- **GET /health** → 200 raw `{"status": "UP"}` — deliberately not enveloped (ops probe).
+
+Validation failure example:
 
 ```json
-{ "timestamp": "...", "status": 400, "error": "Bad Request", "message": "...",
-  "path": "/api/v1/...", "validationErrors": {"field":"msg"} | null }
+{"error": {"code": "VALIDATION_ERROR", "message": "Invalid request data",
+           "details": {"receiverPhone": ["Phone number is invalid"]}}}
 ```
-- not found → 404; bad request → 400; conflict → 409; product-service failure → **502**.
-- Validation → 400 `"Dữ liệu gửi lên không hợp lệ"` + validationErrors (first error per field).
-- Missing required header → 400 `"Thiếu header bắt buộc: <name>"`.
-- Unexpected → 500 `"Đã xảy ra lỗi trong hệ thống"`.
+
+Error codes (`app/errors.py` + `app/messages.py` are authoritative):
+
+| Code | HTTP | Message |
+|---|---|---|
+| VALIDATION_ERROR | 422 | Invalid request data |
+| MALFORMED_REQUEST | 400 | Malformed request / Request body is not valid JSON |
+| MISSING_HEADER | 400 | Missing required header: `<name>` |
+| CART_EMPTY | 404 | Cart does not exist or is empty |
+| CART_VARIANT_NOT_FOUND | 404 | Product variant is not in the cart |
+| PRODUCT_NO_VARIANTS | 404 | Product has no variants |
+| VARIANT_NOT_FOUND | 404 | Product variant not found |
+| PRODUCT_NOT_PURCHASABLE | 400 | Product is not available for purchase |
+| PRODUCT_NO_PRICE | 400 | Product has no price |
+| PRODUCT_INVALID_PRICE | 400 | Product price is invalid |
+| QUANTITY_OUT_OF_BOUNDS | 400 | Quantity must be between 1 and 99 |
+| INSUFFICIENT_STOCK | 400 | Only `<n>` item(s) left in stock |
+| CHECKOUT_ITEMS_NOT_IN_CART | 400 | Some selected products are not in the cart |
+| PAGE_INVALID | 400 | Page must be 1 or greater |
+| PAGE_SIZE_INVALID | 400 | Page size must be between 1 and 100 |
+| INVALID_ORDER_STATUS | 400 | Invalid order status |
+| ORDER_NOT_FOUND | 404 | Order not found |
+| CANCEL_NOT_ALLOWED | 400 | Cannot cancel an order in status `<status>` |
+| INVALID_STATUS_TRANSITION | 400 | Cannot change status from `<cur>` to `<target>` |
+| SETTINGS_NOT_FOUND | 404 | No reconciliation settings have been initialized |
+| PRODUCT_NOT_FOUND | 404 | Product not found: `<id>` |
+| PRODUCT_SERVICE_UNAVAILABLE | 502 | Cannot connect to Product Service |
+| PRODUCT_SERVICE_ERROR | 502 | Product Service rejected the request with status `<code>` / returned an error / returned an empty response |
+| INTERNAL_ERROR | 500 | An internal error occurred |
+
+Fallback codes for errors the framework raises without one (`_STATUS_CODES`): 400 `MALFORMED_REQUEST`, 404 `NOT_FOUND`, 405 `METHOD_NOT_ALLOWED`, 409 `CONFLICT`, 500 `INTERNAL_ERROR`, 502 `BAD_GATEWAY`; the base `ApiError` subclasses default to `BAD_REQUEST` / `NOT_FOUND` / `CONFLICT` / `BAD_GATEWAY` when a call site passes no explicit code.
 
 ## 4. REST API
 
 ### Cart — `/api/v1/carts`
 
-- **GET `/{userId}`** → 200 CartResponse; empty cart (not persisted) when no key. Never 404.
-- **POST `/{userId}/items`** → **201**. Body `{productId: UUID!, variantId: UUID!, quantity: int ≥1!}`. Fetch product live; validate PUBLISHED, price, variant, stock; if variant already in cart, add quantities (bounds 1..99, ≤ stock) and refresh item snapshot; else append.
-- **PUT `/{userId}/items/{variantId}`** → 200. Body `{quantity ≥1!}`. 404 `"Giỏ hàng không tồn tại hoặc đang trống"` / `"Biến thể sản phẩm không tồn tại trong giỏ hàng"`. Absolute quantity, re-validate stock, refresh snapshot.
-- **DELETE `/{userId}/items/{variantId}`** → 200 CartResponse; deletes Redis key if cart empties.
-- **DELETE `/{userId}`** → **204** no body, idempotent.
+- **GET `/{userId}`** → 200 `{"data": CartResponse}`; empty cart (not persisted) when no key. Never 404.
+- **POST `/{userId}/items`** → **201** `{"data": CartResponse}`. Body `{productId: UUID!, variantId: UUID!, quantity: int ≥1!}`. Fetch product live; validate PUBLISHED, price, variant, stock; if variant already in cart, add quantities (bounds 1..99, ≤ stock) and refresh item snapshot; else append.
+- **PUT `/{userId}/items/{variantId}`** → 200 `{"data": CartResponse}`. Body `{quantity ≥1!}`. 404 CART_EMPTY / CART_VARIANT_NOT_FOUND. Absolute quantity, re-validate stock, refresh snapshot.
+- **DELETE `/{userId}/items/{variantId}`** → **200** `{"data": CartResponse}` — this delete returns the recomputed cart, so it keeps a body; deletes the Redis key if the cart empties. 404 CART_EMPTY / CART_VARIANT_NOT_FOUND.
+- **DELETE `/{userId}`** → **204** no body, idempotent (nothing useful to return).
 
-400 messages: `"Số lượng sản phẩm phải từ 1 đến 99"`, `"Sản phẩm hiện không được phép đặt mua"` (not PUBLISHED), `"Sản phẩm chưa có giá bán"`, `"Giá sản phẩm không hợp lệ"`, `"Chỉ còn <n> sản phẩm trong kho"`. 404: `"Không tìm thấy sản phẩm"`, `"Sản phẩm không có biến thể"`, `"Không tìm thấy biến thể sản phẩm"`.
+400 codes: QUANTITY_OUT_OF_BOUNDS, PRODUCT_NOT_PURCHASABLE (not PUBLISHED), PRODUCT_NO_PRICE, PRODUCT_INVALID_PRICE, INSUFFICIENT_STOCK. 404 codes: PRODUCT_NOT_FOUND, PRODUCT_NO_VARIANTS, VARIANT_NOT_FOUND. Their English messages are in the §3 table.
 
 CartResponse: `{userId, items[], totalQuantity, totalAmount, createdAt, updatedAt}`; item: `{productId, variantId, productName, skuVariant, color, colorHex, size, productImageUrl, basePrice, extraPrice, unitPrice, quantity, subtotal}`.
 
@@ -76,18 +122,18 @@ Image selection priority: (1) image of this variant with isThumbnail; (2) image 
 
 ### Orders — `/api/v1`
 
-- **POST `/users/{userId}/checkout`** → **201** `{orderId, orderCode, totalAmount, orderStatus:"PENDING", paymentId:null, paymentStatus:"UNPAID", paymentUrl:null}`.
-  Body: `receiverName` (!, ≤150), `receiverPhone` (!, `^(0|\+84)[0-9]{9,10}$` — msg `"Số điện thoại không hợp lệ"`), `shippingAddress` (!, ≤500), `note` (≤1000), `paymentMethod` (!), `variantIds` (non-empty list — msg `"Vui lòng chọn ít nhất 1 sản phẩm để thanh toán"`).
-  Flow: load cart (404 `"Giỏ hàng không tồn tại hoặc đang trống"`); partial checkout — selected variantIds must all exist in cart (400 `"Một số sản phẩm đã chọn không có trong giỏ hàng"`); for each item re-fetch product live, price = basePrice + variant.extraPrice (cart price NOT trusted; productImageUrl from the cart item); build order PENDING/UNPAID + history (note `"Đơn hàng được tạo"`) + saga log CREATED; publish `stock.reserve.requested`; saga log STOCK_RESERVE_REQUESTED (`"Đã gửi yêu cầu giữ hàng"`). Cart is NOT cleared at checkout (cleared per-item on payment.completed). No stock check at checkout (reservation is product-service's job).
-- **GET `/users/{userId}/orders?status=&page=0&size=20`** → 200 PageResponse, sort createdAt DESC. 400: `"Trang không được nhỏ hơn 0"`, `"Kích thước trang phải từ 1 đến 100"`.
-- **GET `/users/{userId}/orders/{orderId}`** → 200 OrderResponse; scoped by (id, userId); else 404 `"Không tìm thấy đơn hàng"`.
-- **POST `/users/{userId}/orders/{orderId}/cancel`** → 200. Body `{reason: !, ≤1000}`. Cancellable: PENDING, AWAITING_PAYMENT, CONFIRMED; else 400 `"Không thể hủy đơn ở trạng thái <status>"`. History note = reason. Stock release published only for PENDING/AWAITING_PAYMENT (CONFIRMED means paid — no refund flow).
-- **PATCH `/admin/orders/{orderId}/status`** → 200. Header `X-User-Id` required (400 if missing). Body `{status!, note ≤1000}`.
-- **GET `/admin/orders?status=&page=0&size=20`** → 200 PageResponse.
-- **GET `/admin/orders/summary`** → 200 `{totalOrders, ordersByStatus: {<status>: count}}` (only statuses with rows).
-- **GET `/admin/orders/{orderId}`** → 200 / 404, no user scoping.
+- **POST `/users/{userId}/checkout`** → **201** `{"data": {orderId, orderCode, totalAmount, orderStatus:"PENDING", paymentId:null, paymentStatus:"UNPAID", paymentUrl:null}}`.
+  Body: `receiverName` (!, ≤150), `receiverPhone` (!, `^(0|\+84)[0-9]{9,10}$` — msg `"Phone number is invalid"`), `shippingAddress` (!, ≤500), `note` (≤1000), `paymentMethod` (!), `variantIds` (non-empty list — msg `"Select at least 1 product to check out"`). Any of these failing → 422 VALIDATION_ERROR with `details`.
+  Flow: load cart (404 CART_EMPTY); partial checkout — selected variantIds must all exist in cart (400 CHECKOUT_ITEMS_NOT_IN_CART); for each item re-fetch product live, price = basePrice + variant.extraPrice (cart price NOT trusted; productImageUrl from the cart item); build order PENDING/UNPAID + history (note `"Order created"`) + saga log CREATED; publish `stock.reserve.requested`; saga log STOCK_RESERVE_REQUESTED (`"Stock reservation requested"`). Cart is NOT cleared at checkout (cleared per-item on payment.completed). No stock check at checkout (reservation is product-service's job).
+- **GET `/users/{userId}/orders?status=&page=1&pageSize=20`** → 200 list envelope, sort createdAt DESC. `page` is **1-based** (defaults 1), `pageSize` defaults 20; offset = `(page - 1) * pageSize`. 400 PAGE_INVALID (`page < 1`), 400 PAGE_SIZE_INVALID (`pageSize` outside 1..100), 400 INVALID_ORDER_STATUS (unknown `status` filter).
+- **GET `/users/{userId}/orders/{orderId}`** → 200 `{"data": OrderResponse}`; scoped by (id, userId); else 404 ORDER_NOT_FOUND (a malformed `orderId` also gives ORDER_NOT_FOUND).
+- **POST `/users/{userId}/orders/{orderId}/cancel`** → 200 `{"data": OrderResponse}`. Body `{reason: !, ≤1000}`. Cancellable: PENDING, AWAITING_PAYMENT, CONFIRMED; else 400 CANCEL_NOT_ALLOWED. History note = reason. Stock release published only for PENDING/AWAITING_PAYMENT (CONFIRMED means paid — no refund flow).
+- **PATCH `/admin/orders/{orderId}/status`** → 200 `{"data": OrderResponse}`. Header `X-User-Id` required (400 MISSING_HEADER if absent, 400 MALFORMED_REQUEST if not a UUID). Body `{status!, note ≤1000}`.
+- **GET `/admin/orders?status=&page=1&pageSize=20`** → 200 list envelope (same paging rules as the user list).
+- **GET `/admin/orders/summary`** → 200 `{"data": {totalOrders, ordersByStatus: {<status>: count}}}` (only statuses with rows).
+- **GET `/admin/orders/{orderId}`** → 200 `{"data": OrderResponse}` / 404 ORDER_NOT_FOUND, no user scoping.
 
-State machine (admin PATCH; same-status rejected; msg `"Không thể chuyển trạng thái từ <cur> sang <target>"`):
+State machine (admin PATCH; same-status rejected; 400 INVALID_STATUS_TRANSITION, msg `"Cannot change status from <cur> to <target>"`):
 ```
 PENDING → AWAITING_PAYMENT | CANCELLED
 AWAITING_PAYMENT → CONFIRMED | CANCELLED
@@ -101,20 +147,20 @@ DTOs:
 - OrderItemResponse: `{id, productId, variantId, productName, skuVariant, color, colorHex, size, productImageUrl, unitPrice, quantity, subtotal}`.
 - OrderStatusHistoryResponse: `{id, status, changedBy, note, changedAt}`.
 - OrderSummaryResponse: `{id, orderCode, totalAmount, status, paymentMethod, paymentStatus, receiverName, receiverPhone, createdAt}`.
-- PageResponse: `{content, page, size, totalElements, totalPages, first, last}`.
+- List envelope (replaces the old Spring-style `PageResponse`): `{"data": [OrderSummaryResponse], "meta": {page, pageSize, total}}` — no `totalPages`/`first`/`last`; the client derives them.
 
 ### Admin saga logs — `/api/v1/admin/saga-logs`
-- **GET `/days`** → `[{date: "yyyy-MM-dd", totalCount, hasWarning}]` DESC.
-- **GET `/days/{date}`** → `[{orderId, orderCode, entryCount, worstLevel, lastOccurredAt}]` grouped per order for that day, lastOccurredAt DESC.
-- **GET `/orders/{orderId}`** → `[{stage, level, message, sourceService, targetService, errorDetail, retryCount, occurredAt}]` ASC; unknown order → empty 200.
+- **GET `/days`** → 200 `{"data": [{date: "yyyy-MM-dd", totalCount, hasWarning}]}` DESC. Unpaginated — no `meta`.
+- **GET `/days/{date}`** → 200 `{"data": [{orderId, orderCode, entryCount, worstLevel, lastOccurredAt}]}` grouped per order for that day, lastOccurredAt DESC. A `{date}` that is not `yyyy-MM-dd` → 400 MALFORMED_REQUEST with `details.date`.
+- **GET `/orders/{orderId}`** → 200 `{"data": [{stage, level, message, sourceService, targetService, errorDetail, retryCount, occurredAt}]}` ASC; unknown order → 200 with an empty array.
 
 ### Admin reconciliation settings — `/api/v1/admin/saga-settings`
-- **GET** → `{intervalMs, stuckThresholdMinutes, maxAttempts, updatedAt, updatedBy}`; 404 `"Chưa có cấu hình reconciliation nào được khởi tạo"` if missing.
-- **PUT** — header `X-User-Id` required (stored as updated_by). Body: `intervalMs ≥10000!`, `stuckThresholdMinutes ≥1!`, `maxAttempts 1..20!`.
+- **GET** → 200 `{"data": {intervalMs, stuckThresholdMinutes, maxAttempts, updatedAt, updatedBy}}`; 404 SETTINGS_NOT_FOUND if missing.
+- **PUT** — header `X-User-Id` required (stored as updated_by; missing → 400 MISSING_HEADER, non-UUID → 400 MALFORMED_REQUEST with `details["X-User-Id"]`). Body: `intervalMs ≥10000!`, `stuckThresholdMinutes ≥1!`, `maxAttempts 1..20!` (422 VALIDATION_ERROR otherwise). → 200 `{"data": ...}`.
 
 ## 5. Messaging (RabbitMQ)
 
-Topic exchange `order-saga-events` (durable). Consumer queue `order-saga-events.order-service`: durable **quorum**, `x-dead-letter-exchange: order-saga-events.dlx`, `x-delivery-limit: ${SAGA_QUEUE_DELIVERY_LIMIT}`. Bindings: `stock.reserved`, `stock.reserve.rejected`, `payment.completed`, `payment.failed`. Fanout DLX `order-saga-events.dlx` → queue `order-saga-events.dlq` (consumed here: log WARN with x-death routing key + count; best-effort saga log DEAD_LETTERED `"Message '<rk>' bị chuyển vào dead-letter queue sau <n> lần redeliver"`).
+Topic exchange `order-saga-events` (durable). Consumer queue `order-saga-events.order-service`: durable **quorum**, `x-dead-letter-exchange: order-saga-events.dlx`, `x-delivery-limit: ${SAGA_QUEUE_DELIVERY_LIMIT}`. Bindings: `stock.reserved`, `stock.reserve.rejected`, `payment.completed`, `payment.failed`. Fanout DLX `order-saga-events.dlx` → queue `order-saga-events.dlq` (consumed here: log WARN with x-death routing key + count; best-effort saga log DEAD_LETTERED `"Message '<rk>' was dead-lettered after <n> redeliveries"`).
 
 Published (plain JSON, no type headers):
 | Key | Payload | Trigger |
@@ -124,10 +170,12 @@ Published (plain JSON, no type headers):
 | `stock.release.requested` | same shape as reserve | cancel (PENDING/AWAITING_PAYMENT), payment.failed, late stock.reserved on CANCELLED order, reconciliation |
 
 Consumed — all deserialize `{orderId, occurredAt, reason?, paymentId?, transactionCode?}`; branch on routing key; **idempotency by status guard**; unknown orderId → warn + ack:
-- `stock.reserved` (only when PENDING… wait, guard: only when status==PENDING): → AWAITING_PAYMENT, history `"Đã giữ hàng thành công, chờ thanh toán"`, publish `payment.create.requested`, saga logs STOCK_RESERVED + PAYMENT_CREATE_REQUESTED. If order already CANCELLED → publish stock.release.requested (compensation).
-- `stock.reserve.rejected` (only when PENDING): → CANCELLED, history note = reason ?? `"Không đủ hàng trong kho"`. No release (nothing reserved).
-- `payment.completed` (only when AWAITING_PAYMENT): → CONFIRMED, paymentStatus PAID, set paymentId + transactionCode, history `"Thanh toán thành công"`, remove ordered variantIds from cart.
-- `payment.failed` (only when AWAITING_PAYMENT): → CANCELLED, paymentStatus FAILED, history note = reason ?? `"Thanh toán thất bại"`, publish stock.release.requested.
+- `stock.reserved` (guard: only when status == PENDING): → AWAITING_PAYMENT, history `"Stock reserved, awaiting payment"`, publish `payment.create.requested`, saga logs STOCK_RESERVED + PAYMENT_CREATE_REQUESTED. If order already CANCELLED → publish stock.release.requested (compensation).
+- `stock.reserve.rejected` (only when PENDING): → CANCELLED, history note = reason ?? `"Not enough stock available"`. No release (nothing reserved).
+- `payment.completed` (only when AWAITING_PAYMENT): → CONFIRMED, paymentStatus PAID, set paymentId + transactionCode, history `"Payment succeeded"`, remove ordered variantIds from cart.
+- `payment.failed` (only when AWAITING_PAYMENT): → CANCELLED, paymentStatus FAILED, history note = reason ?? `"Payment failed"`, publish stock.release.requested.
+
+Inbound `reason` strings are stored **verbatim** into the order status history — they are authored in English by product-service / payment-service (see `infra/contracts/order-checkout-saga.md`).
 - Any other state → log + ignore (ack).
 
 Chaos modes: STUCK_STOCK_RESERVE / STUCK_PAYMENT silently skip that publish; FORCE_DEAD_LETTER throws in every consumer handler.
@@ -135,15 +183,15 @@ Chaos modes: STUCK_STOCK_RESERVE / STUCK_PAYMENT silently skip that publish; FOR
 ## 6. Reconciliation job
 
 Background loop (~10s tick), settings re-read each tick, effective run cadence `interval_ms`, no leader election (single instance assumption).
-- **Stuck orders** (status PENDING or AWAITING_PAYMENT, not exhausted, `(last_attempt ?? updated_at) < now - stuck_threshold_minutes`): if attempts ≥ max → exhaust; else resend (PENDING → stock.reserve.requested; AWAITING_PAYMENT → payment.create.requested), bump attempt, saga log RECONCILIATION_RESENT `"Đã gửi lại lệnh saga (lần thử N)"` with retryCount.
+- **Stuck orders** (status PENDING or AWAITING_PAYMENT, not exhausted, `(last_attempt ?? updated_at) < now - stuck_threshold_minutes`): if attempts ≥ max → exhaust; else resend (PENDING → stock.reserve.requested; AWAITING_PAYMENT → payment.create.requested), bump attempt, saga log RECONCILIATION_RESENT `"Saga command resent (attempt N)"` with retryCount.
 - **Pending stock releases** (`stock_release_pending`, not exhausted): republish stock.release.requested, clear flag on success, bump attempt.
-- **Exhaust**: `reconciliation_exhausted=true`; if not CANCELLED → CANCELLED + history `"Hệ thống tự hủy do vượt quá số lần thử xử lý saga tự động"`; publish stock.release.requested; saga logs RECONCILIATION_EXHAUSTED (WARN) + STOCK_RELEASE_REQUESTED.
+- **Exhaust**: `reconciliation_exhausted=true`; if not CANCELLED → CANCELLED + history `"Auto-cancelled: exceeded the automatic saga retry limit"`; publish stock.release.requested; saga logs RECONCILIATION_EXHAUSTED (WARN) + STOCK_RELEASE_REQUESTED.
 
 ## 7. External HTTP
 
 Only product-service: **GET `{PRODUCT_SERVICE_URL}/products/{productId}`**.
-404 → 404 `"Không tìm thấy sản phẩm: <id>"`; other 4xx → 502 `"Product Service từ chối yêu cầu với mã lỗi <code>"`; 5xx → 502 `"Product Service đang xảy ra lỗi"`; empty body → 502 `"Product Service trả về dữ liệu rỗng"`; connect failure → 502 `"Không thể kết nối đến Product Service"`.
-Response shape: `{id, sku, name, slug, basePrice, status(DRAFT|PUBLISHED|ARCHIVED), brand{...}, category{...}, variants[{id, color, colorHex, size, extraPrice, skuVariant, stock}], images[{id, variantId, imageUrl, isThumbnail, sortOrder}], ...}`.
+404 → 404 PRODUCT_NOT_FOUND `"Product not found: <id>"`; other 4xx → 502 PRODUCT_SERVICE_ERROR `"Product Service rejected the request with status <code>"`; 5xx → 502 PRODUCT_SERVICE_ERROR `"Product Service returned an error"`; empty/unparseable body or a body without `data` → 502 PRODUCT_SERVICE_ERROR `"Product Service returned an empty response"`; connect failure → 502 PRODUCT_SERVICE_UNAVAILABLE `"Cannot connect to Product Service"`.
+Response shape: product-service answers with the shared envelope, `{"data": {...}}`; the client unwraps `data` and hands callers the plain product dict `{id, sku, name, slug, basePrice, status(DRAFT|PUBLISHED|ARCHIVED), brand{...}, category{...}, variants[{id, color, colorHex, size, extraPrice, skuVariant, stock}], images[{id, variantId, imageUrl, isThumbnail, sortOrder}], ...}`.
 The client must set an explicit timeout + retry (see §8).
 
 ## 8. Reliability requirements

@@ -4,6 +4,8 @@ Validates the request via `RecommendRequest` (Pydantic), delegates ranking to
 `RecommendationService` via `Depends`, and maps downstream product-service errors to
 clear HTTP statuses instead of an unhandled 500 (NFR3/AC6) — mirroring
 `face-processing-service/app/routers/face.py`'s domain-error-to-HTTPException mapping.
+Each mapped error carries a stable `code` in its `detail`, which `app/main.py`'s handler
+turns into the `{"error": {"code", "message"}}` envelope.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -34,9 +36,11 @@ async def recommend(
         return await service.recommend(request)
     except ProductServiceTimeoutError as exc:
         raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc)
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail={"code": "UPSTREAM_TIMEOUT", "message": str(exc)},
         ) from exc
     except ProductServiceUnavailableError as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "UPSTREAM_UNAVAILABLE", "message": str(exc)},
         ) from exc

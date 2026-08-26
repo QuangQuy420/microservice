@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
-import { resetPassword, ApiError } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { apiErrorDetails, resetPassword, useApiError } from "@/lib/api";
 
 // The auth screens share one field/submit look; `.input` (globals.css) carries the common
 // border/focus ring, the extras here are the auth-only deltas (taller box, rounder corners,
@@ -32,6 +33,8 @@ export default function ResetPasswordPage() {
 
 function ResetPasswordForm() {
     const searchParams = useSearchParams();
+    const t = useTranslations("auth");
+    const translateError = useApiError();
 
     const tokenFromUrl = searchParams.get("token") ?? "";
 
@@ -42,6 +45,8 @@ function ResetPasswordForm() {
 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    const [fieldErrors, setFieldErrors] =
+        useState<Record<string, string[]>>({});
     const [message, setMessage] = useState("");
 
     async function handleSubmit(
@@ -50,27 +55,29 @@ function ResetPasswordForm() {
         event.preventDefault();
 
         setError("");
+        setFieldErrors({});
         setMessage("");
 
         if (!token.trim()) {
-            setError("Vui lòng nhập mã đặt lại mật khẩu.");
+            setError(t("resetPassword.errors.tokenRequired"));
             return;
         }
 
         if (newPassword.length < 8) {
-            setError("Mật khẩu mới phải có ít nhất 8 ký tự.");
+            setError(t("resetPassword.errors.passwordTooShort"));
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setError("Mật khẩu xác nhận không khớp.");
+            setError(t("resetPassword.errors.confirmPasswordMismatch"));
             return;
         }
 
         setSubmitting(true);
 
         try {
-            const response = await resetPassword({
+            // Resolves to null — the backend sends no success message, so the copy lives here.
+            await resetPassword({
                 token: token.trim(),
                 newPassword,
             });
@@ -78,16 +85,10 @@ function ResetPasswordForm() {
             setNewPassword("");
             setConfirmPassword("");
 
-            setMessage(
-                response.message ??
-                "Đặt lại mật khẩu thành công.",
-            );
+            setMessage(t("resetPassword.success"));
         } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Không thể đặt lại mật khẩu.",
-            );
+            setError(translateError(err));
+            setFieldErrors(apiErrorDetails(err));
         } finally {
             setSubmitting(false);
         }
@@ -97,15 +98,15 @@ function ResetPasswordForm() {
         <main className="mx-auto grid min-h-[calc(100vh-190px)] max-w-[1100px] place-items-center px-6 py-[clamp(2rem,6vw,4.5rem)] max-sm:px-4">
             <section className="w-[min(100%,450px)] rounded-[18px] border border-border bg-surface p-[clamp(1.4rem,4vw,2.25rem)] shadow-[0_22px_55px_rgba(43,36,32,0.09)]">
                 <p className="mb-[0.55rem] text-[0.76rem] font-bold tracking-[0.11em] text-accent-dark uppercase">
-                    Bảo mật tài khoản
+                    {t("resetPassword.eyebrow")}
                 </p>
 
                 <h1 className="mb-[0.6rem] font-heading text-[clamp(1.7rem,4vw,2.25rem)] font-[650]">
-                    Đặt lại mật khẩu
+                    {t("resetPassword.title")}
                 </h1>
 
                 <p className="mb-6 text-[0.92rem] leading-[1.6] text-text-secondary">
-                    Nhập mã đặt lại mật khẩu và mật khẩu mới.
+                    {t("resetPassword.subtitle")}
                 </p>
 
                 <form
@@ -114,7 +115,7 @@ function ResetPasswordForm() {
                     noValidate
                 >
                     <label htmlFor="reset-token" className={LABEL_CLASS}>
-                        Mã đặt lại mật khẩu
+                        {t("resetPassword.tokenLabel")}
                         <input
                             id="reset-token"
                             className={INPUT_CLASS}
@@ -125,10 +126,17 @@ function ResetPasswordForm() {
                             }
                             autoComplete="off"
                         />
+
+                        {/* Server-side 422 details are English text authored by the backend (FR5 fallback). */}
+                        {fieldErrors.token?.map((msg) => (
+                            <span key={msg} className="field-error">
+                                {msg}
+                            </span>
+                        ))}
                     </label>
 
                     <label htmlFor="reset-new-password" className={LABEL_CLASS}>
-                        Mật khẩu mới
+                        {t("resetPassword.newPasswordLabel")}
                         <input
                             id="reset-new-password"
                             className={INPUT_CLASS}
@@ -140,10 +148,16 @@ function ResetPasswordForm() {
                             autoComplete="new-password"
                             minLength={8}
                         />
+
+                        {fieldErrors.newPassword?.map((msg) => (
+                            <span key={msg} className="field-error">
+                                {msg}
+                            </span>
+                        ))}
                     </label>
 
                     <label htmlFor="reset-confirm-password" className={LABEL_CLASS}>
-                        Xác nhận mật khẩu mới
+                        {t("resetPassword.confirmPasswordLabel")}
                         <input
                             id="reset-confirm-password"
                             className={INPUT_CLASS}
@@ -159,8 +173,8 @@ function ResetPasswordForm() {
 
                     <button type="submit" className={SUBMIT_CLASS} disabled={submitting}>
                         {submitting
-                            ? "Đang cập nhật..."
-                            : "Đặt lại mật khẩu"}
+                            ? t("resetPassword.submitting")
+                            : t("resetPassword.submit")}
                     </button>
 
                     {message && (
@@ -176,7 +190,7 @@ function ResetPasswordForm() {
 
                 <div className="mt-5 text-center text-[0.86rem] text-text-secondary">
                     <Link href="/login" className="font-bold no-underline hover:underline">
-                        Quay lại đăng nhập
+                        {t("resetPassword.backToLogin")}
                     </Link>
                 </div>
             </section>

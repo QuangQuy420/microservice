@@ -51,31 +51,31 @@ def _as_decimal(value: Any) -> Decimal:
 def _find_variant(product: dict, variant_id: str) -> dict:
     variants = product.get("variants")
     if not variants:
-        raise NotFoundError(messages.PRODUCT_NO_VARIANTS)
+        raise NotFoundError(messages.PRODUCT_NO_VARIANTS, code="PRODUCT_NO_VARIANTS")
     for variant in variants:
         if str(variant.get("id")) == str(variant_id):
             return variant
-    raise NotFoundError(messages.VARIANT_NOT_FOUND)
+    raise NotFoundError(messages.VARIANT_NOT_FOUND, code="VARIANT_NOT_FOUND")
 
 
 def _validate_product(product: dict) -> Decimal:
     """Returns basePrice as Decimal after PUBLISHED/price validation."""
     if product.get("status") != "PUBLISHED":
-        raise BadRequestError(messages.PRODUCT_NOT_PURCHASABLE)
+        raise BadRequestError(messages.PRODUCT_NOT_PURCHASABLE, code="PRODUCT_NOT_PURCHASABLE")
     base_price = product.get("basePrice")
     if base_price is None:
-        raise BadRequestError(messages.PRODUCT_NO_PRICE)
+        raise BadRequestError(messages.PRODUCT_NO_PRICE, code="PRODUCT_NO_PRICE")
     base = _as_decimal(base_price)
     if base < 0:
-        raise BadRequestError(messages.PRODUCT_INVALID_PRICE)
+        raise BadRequestError(messages.PRODUCT_INVALID_PRICE, code="PRODUCT_INVALID_PRICE")
     return base
 
 
 def _validate_quantity(quantity: int, stock: int) -> None:
     if quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
-        raise BadRequestError(messages.QUANTITY_BOUNDS)
+        raise BadRequestError(messages.QUANTITY_BOUNDS, code="QUANTITY_OUT_OF_BOUNDS")
     if quantity > stock:
-        raise BadRequestError(messages.STOCK_LEFT.format(n=stock))
+        raise BadRequestError(messages.STOCK_LEFT.format(n=stock), code="INSUFFICIENT_STOCK")
 
 
 def _build_item_snapshot(
@@ -85,7 +85,7 @@ def _build_item_snapshot(
     extra = _as_decimal(variant.get("extraPrice") or 0)
     unit_price = base + extra
     if unit_price < 0:
-        raise BadRequestError(messages.PRODUCT_INVALID_PRICE)
+        raise BadRequestError(messages.PRODUCT_INVALID_PRICE, code="PRODUCT_INVALID_PRICE")
     return {
         "productId": str(product_id),
         "variantId": str(variant_id),
@@ -178,12 +178,12 @@ class CartService:
     def update_item(self, user_id: str, variant_id: str, quantity: int) -> dict:
         cart = self._carts.load(user_id)
         if cart is None or not cart.get("items"):
-            raise NotFoundError(messages.CART_NOT_FOUND)
+            raise NotFoundError(messages.CART_NOT_FOUND, code="CART_EMPTY")
         existing = next(
             (i for i in cart["items"] if str(i.get("variantId")) == str(variant_id)), None
         )
         if existing is None:
-            raise NotFoundError(messages.CART_VARIANT_NOT_FOUND)
+            raise NotFoundError(messages.CART_VARIANT_NOT_FOUND, code="CART_VARIANT_NOT_FOUND")
 
         product = self._products.get_product(str(existing["productId"]))
         variant = _find_variant(product, variant_id)
@@ -201,12 +201,12 @@ class CartService:
     def remove_item(self, user_id: str, variant_id: str) -> dict:
         cart = self._carts.load(user_id)
         if cart is None or not cart.get("items"):
-            raise NotFoundError(messages.CART_NOT_FOUND)
+            raise NotFoundError(messages.CART_NOT_FOUND, code="CART_EMPTY")
         remaining = [
             i for i in cart["items"] if str(i.get("variantId")) != str(variant_id)
         ]
         if len(remaining) == len(cart["items"]):
-            raise NotFoundError(messages.CART_VARIANT_NOT_FOUND)
+            raise NotFoundError(messages.CART_VARIANT_NOT_FOUND, code="CART_VARIANT_NOT_FOUND")
         cart["items"] = remaining
         cart["updatedAt"] = now_vn().isoformat()
         if not remaining:

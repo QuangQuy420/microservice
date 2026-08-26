@@ -1,15 +1,16 @@
+/** `meta` sibling of the list envelope — `page` is 1-based, shared by every service. */
+export interface PaginationMetaDto {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export class PaginatedResponseDto<T> {
   items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  meta: PaginationMetaDto;
 
-  constructor(items: T[], total: number, page: number, limit: number) {
+  constructor(items: T[], total: number, page: number, pageSize: number) {
     this.items = items;
-    this.total = total;
-    this.page = page;
-    this.limit = limit;
-    this.totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
+    this.meta = { page, pageSize, total };
   }
 }

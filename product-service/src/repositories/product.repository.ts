@@ -19,7 +19,7 @@ export interface ProductListFilter {
   maxPrice?: number;
   search?: string;
   page: number;
-  limit: number;
+  pageSize: number;
 }
 
 export interface ProductListResult {
@@ -105,8 +105,8 @@ export class TypeOrmProductRepository implements IProductRepository {
     }
 
     qb.orderBy('product.createdAt', 'DESC')
-      .skip((filter.page - 1) * filter.limit)
-      .take(filter.limit);
+      .skip((filter.page - 1) * filter.pageSize)
+      .take(filter.pageSize);
 
     const [items, total] = await qb.getManyAndCount();
     return { items, total };

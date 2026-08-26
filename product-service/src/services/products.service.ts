@@ -1,8 +1,8 @@
 import {
-  BadRequestException,
   Inject,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import {
@@ -68,7 +68,7 @@ export class ProductsService {
       maxPrice: query.maxPrice,
       search: query.search,
       page: query.page,
-      limit: query.limit,
+      pageSize: query.pageSize,
     };
 
     const { items, total } = await this.productRepository.findAndCount(filter);
@@ -78,7 +78,7 @@ export class ProductsService {
         [],
         total,
         query.page,
-        query.limit,
+        query.pageSize,
       );
     }
 
@@ -96,7 +96,7 @@ export class ProductsService {
       dtos,
       total,
       query.page,
-      query.limit,
+      query.pageSize,
     );
   }
 
@@ -104,7 +104,10 @@ export class ProductsService {
     const product =
       await this.productRepository.findByIdWithBrandAndCategory(id);
     if (!product) {
-      throw new NotFoundException(`Không tìm thấy sản phẩm ${id}`);
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: `Product ${id} not found`,
+      });
     }
 
     const [variants, images] = await Promise.all([
@@ -151,7 +154,10 @@ export class ProductsService {
     const existing =
       await this.productRepository.findByIdWithBrandAndCategory(id);
     if (!existing) {
-      throw new NotFoundException(`Không tìm thấy sản phẩm ${id}`);
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: `Product ${id} not found`,
+      });
     }
 
     if (dto.categoryId || dto.brandId) {
@@ -191,7 +197,10 @@ export class ProductsService {
     const existing =
       await this.productRepository.findByIdWithBrandAndCategory(id);
     if (!existing) {
-      throw new NotFoundException(`Không tìm thấy sản phẩm ${id}`);
+      throw new NotFoundException({
+        code: 'PRODUCT_NOT_FOUND',
+        message: `Product ${id} not found`,
+      });
     }
     await this.productRepository.softDelete(id);
 
@@ -201,7 +210,10 @@ export class ProductsService {
     });
   }
 
-  /** Throws `BadRequestException` (400) on an invalid/missing FK — AC8. */
+  /**
+   * Throws `UnprocessableEntityException` (422) on an invalid/missing FK — the request is
+   * well-formed, the referenced row just isn't there (decision 7).
+   */
   private async assertCategoryAndBrandExist(
     categoryId: string,
     brandId: string,
@@ -211,10 +223,16 @@ export class ProductsService {
       this.brandRepository.findById(brandId),
     ]);
     if (!category) {
-      throw new BadRequestException(`categoryId ${categoryId} không tồn tại`);
+      throw new UnprocessableEntityException({
+        code: 'CATEGORY_NOT_FOUND',
+        message: `categoryId ${categoryId} does not exist`,
+      });
     }
     if (!brand) {
-      throw new BadRequestException(`brandId ${brandId} không tồn tại`);
+      throw new UnprocessableEntityException({
+        code: 'BRAND_NOT_FOUND',
+        message: `brandId ${brandId} does not exist`,
+      });
     }
   }
 

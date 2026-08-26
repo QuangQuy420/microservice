@@ -12,6 +12,10 @@ import { CreateCategoryDto } from '../routes/dto/create-category.dto';
 import { CategoryResponseDto } from '../routes/dto/category-response.dto';
 import { UpdateCategoryDto } from '../routes/dto/update-category.dto';
 
+/** Raised both by the pre-check and by the FK violation the same delete can race into. */
+const CATEGORY_IN_USE_MESSAGE =
+  'Cannot delete this category because products still use it. Move or delete those products first.';
+
 @Injectable()
 export class CategoriesService {
   constructor(
@@ -27,7 +31,10 @@ export class CategoriesService {
   async findOne(id: string): Promise<CategoryResponseDto> {
     const category = await this.categoryRepository.findById(id);
     if (!category) {
-      throw new NotFoundException('Không tìm thấy danh mục.');
+      throw new NotFoundException({
+        code: 'CATEGORY_NOT_FOUND',
+        message: 'Category not found',
+      });
     }
     return this.toResponseDto(category);
   }
@@ -42,7 +49,10 @@ export class CategoriesService {
   ): Promise<CategoryResponseDto> {
     const existing = await this.categoryRepository.findById(id);
     if (!existing) {
-      throw new NotFoundException('Không tìm thấy danh mục.');
+      throw new NotFoundException({
+        code: 'CATEGORY_NOT_FOUND',
+        message: 'Category not found',
+      });
     }
     if (dto.name === undefined) return this.toResponseDto(existing);
 
@@ -55,7 +65,10 @@ export class CategoriesService {
           slug,
         });
         if (!category) {
-          throw new NotFoundException('Không tìm thấy danh mục.');
+          throw new NotFoundException({
+            code: 'CATEGORY_NOT_FOUND',
+            message: 'Category not found',
+          });
         }
         return this.toResponseDto(category);
       } catch (error) {
@@ -67,22 +80,27 @@ export class CategoriesService {
   async remove(id: string): Promise<void> {
     const category = await this.categoryRepository.findById(id);
     if (!category) {
-      throw new NotFoundException('Không tìm thấy danh mục.');
+      throw new NotFoundException({
+        code: 'CATEGORY_NOT_FOUND',
+        message: 'Category not found',
+      });
     }
 
     if (await this.categoryRepository.countProducts(id)) {
-      throw new ConflictException(
-        'Không thể xoá danh mục vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.',
-      );
+      throw new ConflictException({
+        code: 'CATEGORY_IN_USE',
+        message: CATEGORY_IN_USE_MESSAGE,
+      });
     }
 
     try {
       await this.categoryRepository.delete(id);
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
-        throw new ConflictException(
-          'Không thể xoá danh mục vì vẫn còn sản phẩm đang sử dụng. Vui lòng chuyển hoặc xoá sản phẩm trước.',
-        );
+        throw new ConflictException({
+          code: 'CATEGORY_IN_USE',
+          message: CATEGORY_IN_USE_MESSAGE,
+        });
       }
       throw error;
     }

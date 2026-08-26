@@ -38,12 +38,14 @@ class TestStatusTransitionMatrix:
         )
         if target != current and target in ALLOWED[current]:
             assert res.status_code == 200, (current, target)
-            assert res.json()["status"] == target
+            assert res.json()["data"]["status"] == target
         else:
             assert res.status_code == 400, (current, target)
+            error = res.json()["error"]
+            assert error["code"] == "INVALID_STATUS_TRANSITION", (current, target)
             assert (
-                res.json()["message"]
-                == f"Không thể chuyển trạng thái từ {current} sang {target}"
+                error["message"]
+                == f"Cannot change status from {current} to {target}"
             )
 
     def test_history_records_admin_and_note(self, client, session):
@@ -53,7 +55,7 @@ class TestStatusTransitionMatrix:
             json={"status": "AWAITING_PAYMENT", "note": "Xác nhận thủ công"},
             headers=HEADERS,
         )
-        history = res.json()["statusHistories"][-1]
+        history = res.json()["data"]["statusHistories"][-1]
         assert history["status"] == "AWAITING_PAYMENT"
         assert history["changedBy"] == ADMIN
         assert history["note"] == "Xác nhận thủ công"
@@ -64,7 +66,10 @@ class TestStatusTransitionMatrix:
             f"/api/v1/admin/orders/{order.id}/status", json={"status": "CANCELLED"}
         )
         assert res.status_code == 400
-        assert res.json()["message"] == "Thiếu header bắt buộc: X-User-Id"
+        assert res.json()["error"] == {
+            "code": "MISSING_HEADER",
+            "message": "Missing required header: X-User-Id",
+        }
 
     def test_invalid_status_value(self, client, session):
         order = create_order(session, status="PENDING")
@@ -73,8 +78,10 @@ class TestStatusTransitionMatrix:
             json={"status": "NOT_A_STATUS"},
             headers=HEADERS,
         )
-        assert res.status_code == 400
-        assert res.json()["message"] == "Dữ liệu gửi lên không hợp lệ"
+        assert res.status_code == 422
+        error = res.json()["error"]
+        assert error["code"] == "VALIDATION_ERROR"
+        assert error["details"]["status"] == ["Invalid order status"]
 
     def test_unknown_order(self, client):
         res = client.patch(
@@ -83,7 +90,7 @@ class TestStatusTransitionMatrix:
             headers=HEADERS,
         )
         assert res.status_code == 404
-        assert res.json()["message"] == "Không tìm thấy đơn hàng"
+        assert res.json()["error"]["code"] == "ORDER_NOT_FOUND"
 
 
 class TestAdminCancelReleasesStock:
@@ -120,17 +127,19 @@ class TestAdminQueries:
         create_order(session)
         res = client.get("/api/v1/admin/orders")
         assert res.status_code == 200
-        assert res.json()["totalElements"] == 2
+        assert res.json()["meta"] == {"page": 1, "pageSize": 20, "total": 2}
 
     def test_admin_list_paging_validation(self, client):
-        assert client.get("/api/v1/admin/orders", params={"page": -1}).status_code == 400
-        assert client.get("/api/v1/admin/orders", params={"size": 101}).status_code == 400
+        assert client.get("/api/v1/admin/orders", params={"page": 0}).status_code == 400
+        assert (
+            client.get("/api/v1/admin/orders", params={"pageSize": 101}).status_code == 400
+        )
 
     def test_admin_detail_no_user_scoping(self, client, session):
         order = create_order(session)
         res = client.get(f"/api/v1/admin/orders/{order.id}")
         assert res.status_code == 200
-        assert res.json()["id"] == str(order.id)
+        assert res.json()["data"]["id"] == str(order.id)
 
     def test_admin_detail_404(self, client):
         res = client.get(f"/api/v1/admin/orders/{uuid.uuid4()}")
@@ -142,10 +151,10 @@ class TestAdminQueries:
         create_order(session, status="CANCELLED")
         res = client.get("/api/v1/admin/orders/summary")
         assert res.status_code == 200
-        body = res.json()
+        body = res.json()["data"]
         assert body["totalOrders"] == 3
         assert body["ordersByStatus"] == {"PENDING": 2, "CANCELLED": 1}
 
     def test_summary_empty(self, client):
         res = client.get("/api/v1/admin/orders/summary")
-        assert res.json() == {"totalOrders": 0, "ordersByStatus": {}}
+        assert res.json() == {"data": {"totalOrders": 0, "ordersByStatus": {}}}

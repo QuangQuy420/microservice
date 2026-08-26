@@ -10,6 +10,8 @@ export interface UserProfile {
     avatarUrl?: string | null;
     address?: string | null;
     dateOfBirth?: string | null;
+    // ISO 639-1 code, one of @/i18n/config's LOCALES — the account's saved UI language (FR6).
+    preferredLanguage?: string | null;
 }
 
 // Mirrors user-service's PermissionResponse (id, code, description) — the fixed,
@@ -50,6 +52,9 @@ export interface UpdateProfileRequest {
     avatarUrl?: string;
     address?: string;
     dateOfBirth?: string;
+    // Restricted to SUPPORTED_LANGUAGES by user-service's UpdateProfileSerializer — an unknown
+    // value comes back as 422 VALIDATION_ERROR.
+    preferredLanguage?: string;
 }
 
 export interface ChangePasswordRequest {

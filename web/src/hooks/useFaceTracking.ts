@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { FaceLandmarkerResult } from "@mediapipe/tasks-vision";
 import { computeOverlayTransform, MAX_FACES_TO_DETECT } from "@/lib/faceOverlay";
 
@@ -46,6 +47,9 @@ export function useFaceTracking({
 }: UseFaceTrackingOptions): UseFaceTrackingResult {
   const [status, setStatus] = useState<FaceTrackingStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // The status messages this hook sets are rendered as-is by TryOnPage, so they are translated
+  // here rather than in the component.
+  const t = useTranslations("tryon");
   const overlayImageRef = useRef<HTMLImageElement | null>(null);
 
   // Load the overlay image once per URL change, off the main detection loop.
@@ -70,7 +74,7 @@ export function useFaceTracking({
       // body (react-hooks/set-state-in-effect) — it still runs before the next paint.
       queueMicrotask(() => {
         setStatus("unsupported");
-        setErrorMessage("Trình duyệt này không hỗ trợ truy cập camera.");
+        setErrorMessage(t("status.unsupported"));
       });
       return;
     }
@@ -101,9 +105,7 @@ export function useFaceTracking({
       } catch {
         if (!cancelled) {
           setStatus("camera-denied");
-          setErrorMessage(
-            "Không thể truy cập camera. Vui lòng cho phép quyền camera để thử kính AR.",
-          );
+          setErrorMessage(t("status.cameraDenied"));
         }
         return;
       }
@@ -132,7 +134,7 @@ export function useFaceTracking({
       } catch {
         if (!cancelled) {
           setStatus("error");
-          setErrorMessage("Không thể tải mô hình nhận diện khuôn mặt. Vui lòng thử lại.");
+          setErrorMessage(t("status.modelFailed"));
         }
         return;
       }
@@ -212,6 +214,9 @@ export function useFaceTracking({
       if (faceLandmarker) faceLandmarker.close();
       console.error = originalConsoleError;
     };
+    // `t` is stable for a given locale and must not restart the camera/model session; only
+    // enabled/refs should re-trigger it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, videoRef, canvasRef]);
 
   return { status, errorMessage };

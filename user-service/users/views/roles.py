@@ -7,7 +7,7 @@ from ..errors import ApiError
 from ..models import Permission, Role, RolePermission, UserRole
 from ..permissions import require
 from ..presenters import permission_response, role_response
-from ..responses import ok
+from ..responses import data_response
 from ..serializers import RoleUpsertSerializer
 from .helpers import get_role_or_404
 
@@ -25,9 +25,7 @@ class RolesView(APIView):
 
     def get(self, request):
         roles = Role.objects.order_by("name")
-        return ok(
-            "Lấy danh sách vai trò thành công", [role_response(r) for r in roles]
-        )
+        return data_response([role_response(r) for r in roles])
 
     def post(self, request):
         serializer = RoleUpsertSerializer(data=request.data)
@@ -45,7 +43,7 @@ class RolesView(APIView):
                 RolePermission(role=role, permission=p) for p in permissions
             )
 
-        return ok("Tạo vai trò thành công", role_response(role), status=201)
+        return data_response(role_response(role), status=201)
 
 
 class RoleDetailView(APIView):
@@ -77,7 +75,7 @@ class RoleDetailView(APIView):
                 RolePermission(role=role, permission=p) for p in permissions
             )
 
-        return ok("Cập nhật vai trò thành công", role_response(role))
+        return data_response(role_response(role))
 
     def delete(self, request, role_id):
         role = get_role_or_404(role_id)
@@ -86,7 +84,7 @@ class RoleDetailView(APIView):
         with transaction.atomic():
             RolePermission.objects.filter(role_id=role.id).delete()
             role.delete()
-        return ok("Xóa vai trò thành công", None)
+        return data_response(None)
 
 
 class PermissionListView(APIView):
@@ -94,7 +92,4 @@ class PermissionListView(APIView):
 
     def get(self, request):
         permissions = Permission.objects.order_by("code")
-        return ok(
-            "Lấy danh sách quyền thành công",
-            [permission_response(p) for p in permissions],
-        )
+        return data_response([permission_response(p) for p in permissions])

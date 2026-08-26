@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
+import { apiError } from '../common/api-error';
 import { AppConfig } from '../config/configuration';
 
 @Injectable()
@@ -74,7 +75,10 @@ export class AuthProxyService {
             );
 
             return new HttpException(
-                'user-service không phản hồi kịp thời',
+                apiError(
+                    'UPSTREAM_TIMEOUT',
+                    'user-service did not respond in time',
+                ),
                 HttpStatus.GATEWAY_TIMEOUT,
             );
         }
@@ -84,7 +88,7 @@ export class AuthProxyService {
         );
 
         return new HttpException(
-            'Không thể kết nối tới user-service',
+            apiError('UPSTREAM_UNAVAILABLE', 'user-service is unreachable'),
             HttpStatus.SERVICE_UNAVAILABLE,
         );
     }

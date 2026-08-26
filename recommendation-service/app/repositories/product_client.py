@@ -67,7 +67,8 @@ class HttpxProductServiceClient:
         if max_price is not None:
             params["maxPrice"] = max_price
         if limit is not None:
-            params["limit"] = limit
+            # product-service's page-size query param is `pageSize`.
+            params["pageSize"] = limit
 
         try:
             async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout) as client:
@@ -75,7 +76,7 @@ class HttpxProductServiceClient:
                 response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise ProductServiceTimeoutError(
-                "product-service không phản hồi kịp thời."
+                "product-service did not respond in time"
             ) from exc
         except httpx.HTTPStatusError as exc:
             # product-service responded but with an error status — treat as unavailable
@@ -83,15 +84,17 @@ class HttpxProductServiceClient:
             # cause product-service to 4xx here; a well-formed faceShape/filters are
             # always valid query params).
             raise ProductServiceUnavailableError(
-                f"product-service trả về lỗi: {exc.response.status_code}."
+                f"product-service returned an error: {exc.response.status_code}"
             ) from exc
         except httpx.HTTPError as exc:
             raise ProductServiceUnavailableError(
-                "Không thể kết nối tới product-service."
+                "Could not connect to product-service"
             ) from exc
 
         body = response.json()
-        return [RecommendedProductDto(**item, score=0.0) for item in body["items"]]
+        # product-service answers with the unified list envelope `{"data": [...], "meta": {...}}`;
+        # `meta` is unused here (the ranking pool is a single over-fetched page, not paged output).
+        return [RecommendedProductDto(**item, score=0.0) for item in body["data"]]
 
 
 @lru_cache

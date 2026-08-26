@@ -2,8 +2,8 @@
 
 Fields are declared Optional with `validate_default=True` so that a missing
 field runs the same validator as a present-but-invalid one.
-Validators raise the exact Vietnamese messages; the RequestValidationError
-handler collects them into `validationErrors` (first error per field).
+Validators raise the exact English messages; the RequestValidationError
+handler collects them into `error.details` (all errors per field).
 """
 from __future__ import annotations
 
@@ -38,14 +38,14 @@ class AddCartItemRequest(_Request):
     @classmethod
     def _product_id(cls, v):
         if v is None:
-            raise ValueError("productId không được để trống")
+            raise ValueError("productId is required")
         return v
 
     @field_validator("variantId")
     @classmethod
     def _variant_id(cls, v):
         if v is None:
-            raise ValueError("variantId không được để trống")
+            raise ValueError("variantId is required")
         return v
 
     @field_validator("quantity")
@@ -80,16 +80,16 @@ class CheckoutRequest(_Request):
     def _receiver_name(cls, v):
         return _require_text(
             v,
-            "Tên người nhận không được để trống",
+            "Receiver name is required",
             150,
-            "Tên người nhận không được vượt quá 150 ký tự",
+            "Receiver name must not exceed 150 characters",
         )
 
     @field_validator("receiverPhone")
     @classmethod
     def _receiver_phone(cls, v):
         if v is None or not v.strip():
-            raise ValueError("Số điện thoại không được để trống")
+            raise ValueError("Phone number is required")
         if not _PHONE_RE.fullmatch(v):
             raise ValueError(messages.PHONE_INVALID)
         return v
@@ -99,23 +99,23 @@ class CheckoutRequest(_Request):
     def _shipping_address(cls, v):
         return _require_text(
             v,
-            "Địa chỉ giao hàng không được để trống",
+            "Shipping address is required",
             500,
-            "Địa chỉ giao hàng không được vượt quá 500 ký tự",
+            "Shipping address must not exceed 500 characters",
         )
 
     @field_validator("note")
     @classmethod
     def _note(cls, v):
         if v is not None and len(v) > 1000:
-            raise ValueError("Ghi chú không được vượt quá 1000 ký tự")
+            raise ValueError("Note must not exceed 1000 characters")
         return v
 
     @field_validator("paymentMethod")
     @classmethod
     def _payment_method(cls, v):
         if v is None or not v.strip():
-            raise ValueError("Phương thức thanh toán không được để trống")
+            raise ValueError("Payment method is required")
         return v
 
     @field_validator("variantIds")
@@ -134,9 +134,9 @@ class CancelOrderRequest(_Request):
     def _reason(cls, v):
         return _require_text(
             v,
-            "Lý do hủy đơn không được để trống",
+            "Cancellation reason is required",
             1000,
-            "Lý do hủy đơn không được vượt quá 1000 ký tự",
+            "Cancellation reason must not exceed 1000 characters",
         )
 
 
@@ -150,14 +150,14 @@ class UpdateOrderStatusRequest(_Request):
         from app.enums import OrderStatus
 
         if v is None or v not in {s.value for s in OrderStatus}:
-            raise ValueError("Trạng thái đơn hàng không hợp lệ")
+            raise ValueError(messages.ORDER_STATUS_INVALID)
         return v
 
     @field_validator("note")
     @classmethod
     def _note(cls, v):
         if v is not None and len(v) > 1000:
-            raise ValueError("Ghi chú không được vượt quá 1000 ký tự")
+            raise ValueError("Note must not exceed 1000 characters")
         return v
 
 
@@ -170,19 +170,19 @@ class UpdateSagaSettingsRequest(_Request):
     @classmethod
     def _interval(cls, v):
         if v is None or v < 10000:
-            raise ValueError("Chu kỳ chạy phải tối thiểu 10000 ms")
+            raise ValueError("Interval must be at least 10000 ms")
         return v
 
     @field_validator("stuckThresholdMinutes")
     @classmethod
     def _threshold(cls, v):
         if v is None or v < 1:
-            raise ValueError("Ngưỡng phát hiện đơn kẹt phải tối thiểu 1 phút")
+            raise ValueError("Stuck-order threshold must be at least 1 minute")
         return v
 
     @field_validator("maxAttempts")
     @classmethod
     def _max_attempts(cls, v):
         if v is None or v < 1 or v > 20:
-            raise ValueError("Số lần thử tối đa phải từ 1 đến 20")
+            raise ValueError("Max attempts must be between 1 and 20")
         return v

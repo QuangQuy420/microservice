@@ -1,9 +1,10 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState, type FormEvent } from "react";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
-import { ApiError, getSagaSettings, updateSagaSettings } from "@/lib/api";
+import { apiErrorDetails, getSagaSettings, updateSagaSettings, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 
 interface FormState {
@@ -18,12 +19,16 @@ function blankForm(): FormState {
   return { intervalMs: "", stuckThresholdMinutes: "", maxAttempts: "" };
 }
 
-// Admin "Cài đặt" tab (T16, AC4) — view/edit the checkout saga reconciliation job's live retry
+// Admin "Settings" tab (T16, AC4) — view/edit the checkout saga reconciliation job's live retry
 // config (retry interval, stuck threshold, max attempts). Bounds mirror order-service's
 // UpdateReconciliationSettingsRequest / api-gateway's UpdateSagaSettingsDto (plan Q1): interval
 // >= 10000ms, stuck threshold >= 1 minute, max attempts 1-20. Field/validation/submit flow
 // modeled on ProductEditForm.tsx's numeric-field pattern.
 export function SagaSettingsPage() {
+  const t = useTranslations("admin");
+  const common = useTranslations("common");
+  const translateError = useApiError();
+
   const [form, setForm] = useState<FormState>(blankForm());
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
@@ -32,6 +37,7 @@ export function SagaSettingsPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,7 +47,7 @@ export function SagaSettingsPage() {
       const token = getAccessToken();
       if (!token) {
         if (!cancelled) {
-          setLoadError("Vui lòng đăng nhập lại.");
+          setLoadError(t("settings.sessionExpired"));
           setIsLoading(false);
         }
         return;
@@ -58,7 +64,7 @@ export function SagaSettingsPage() {
         setUpdatedAt(settings.updatedAt);
       } catch (err) {
         if (!cancelled) {
-          setLoadError(err instanceof ApiError ? err.message : "Không thể tải cấu hình.");
+          setLoadError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -69,7 +75,7 @@ export function SagaSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t, translateError]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -78,6 +84,7 @@ export function SagaSettingsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setFieldErrors({});
     setMessage(null);
 
     const intervalMs = Number(form.intervalMs);
@@ -85,21 +92,21 @@ export function SagaSettingsPage() {
     const maxAttempts = Number(form.maxAttempts);
 
     if (!Number.isInteger(intervalMs) || intervalMs < 10000) {
-      setError("Chu kỳ thử lại phải là số nguyên, tối thiểu 10000 mili-giây.");
+      setError(t("settings.intervalInvalid"));
       return;
     }
     if (!Number.isInteger(stuckThresholdMinutes) || stuckThresholdMinutes < 1) {
-      setError("Ngưỡng đơn hàng bị kẹt phải là số nguyên, tối thiểu 1 phút.");
+      setError(t("settings.stuckThresholdInvalid"));
       return;
     }
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
-      setError("Số lần thử lại tối đa phải là số nguyên trong khoảng từ 1 đến 20.");
+      setError(t("settings.maxAttemptsInvalid"));
       return;
     }
 
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("settings.sessionExpired"));
       return;
     }
 
@@ -116,15 +123,16 @@ export function SagaSettingsPage() {
         maxAttempts: String(updated.maxAttempts),
       });
       setUpdatedAt(updated.updatedAt);
-      setMessage("Đã lưu cấu hình thành công.");
+      setMessage(t("settings.saved"));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Lưu cấu hình thất bại.");
+      setError(translateError(err));
+      setFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (isLoading) return <LoadingState label="Đang tải cấu hình..." />;
+  if (isLoading) return <LoadingState label={t("settings.loading")} />;
   if (loadError) return <ErrorState message={loadError} />;
 
   return (
@@ -137,28 +145,25 @@ export function SagaSettingsPage() {
             className="btn btn-primary"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Đang lưu…" : "Lưu cấu hình"}
+            {isSubmitting ? common("saving") : t("settings.saveButton")}
           </button>
         </div>
       </header>
 
       <form id="saga-settings-form" className="mx-auto max-w-[980px] p-7" onSubmit={handleSubmit}>
-        <div className="mb-1 font-heading text-2xl font-semibold">Cài đặt thử lại saga</div>
-        <div className="mb-6 text-[0.85rem] text-text-muted">
-          Điều chỉnh chu kỳ, ngưỡng và số lần thử lại của tiến trình xử lý đơn hàng bị kẹt giữa
-          chừng khi thanh toán.
-        </div>
+        <div className="mb-1 font-heading text-2xl font-semibold">{t("settings.heading")}</div>
+        <div className="mb-6 text-[0.85rem] text-text-muted">{t("settings.description")}</div>
 
         {error && <p className="field-error my-[1em]">{error}</p>}
         {message && <p role="status" className="my-[1em]">{message}</p>}
 
         <div className="rounded-lg border border-border bg-surface p-5">
           <div className="mb-4 text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
-            Tham số thử lại
+            {t("settings.paramsSection")}
           </div>
 
           <label className={FORM_FIELD} htmlFor="settings-interval-ms">
-            Chu kỳ thử lại (mili-giây)
+            {t("settings.intervalLabel")}
           </label>
           <input
             id="settings-interval-ms"
@@ -169,9 +174,14 @@ export function SagaSettingsPage() {
             value={form.intervalMs}
             onChange={(event) => updateField("intervalMs", event.target.value)}
           />
+          {fieldErrors.intervalMs?.map((msg) => (
+            <p key={msg} role="alert" className="field-error mb-4">
+              {msg}
+            </p>
+          ))}
 
           <label className={FORM_FIELD} htmlFor="settings-stuck-threshold">
-            Ngưỡng đơn hàng bị kẹt (phút)
+            {t("settings.stuckThresholdLabel")}
           </label>
           <input
             id="settings-stuck-threshold"
@@ -182,9 +192,14 @@ export function SagaSettingsPage() {
             value={form.stuckThresholdMinutes}
             onChange={(event) => updateField("stuckThresholdMinutes", event.target.value)}
           />
+          {fieldErrors.stuckThresholdMinutes?.map((msg) => (
+            <p key={msg} role="alert" className="field-error mb-4">
+              {msg}
+            </p>
+          ))}
 
           <label className={FORM_FIELD} htmlFor="settings-max-attempts">
-            Số lần thử lại tối đa
+            {t("settings.maxAttemptsLabel")}
           </label>
           <input
             id="settings-max-attempts"
@@ -196,11 +211,16 @@ export function SagaSettingsPage() {
             value={form.maxAttempts}
             onChange={(event) => updateField("maxAttempts", event.target.value)}
           />
+          {fieldErrors.maxAttempts?.map((msg) => (
+            <p key={msg} role="alert" className="field-error mb-4">
+              {msg}
+            </p>
+          ))}
         </div>
 
         {updatedAt && (
           <p className="text-xs text-text-muted">
-            Cập nhật lần cuối: {new Date(updatedAt).toLocaleString("vi-VN")}
+            {t("settings.lastUpdated", { at: new Date(updatedAt).toLocaleString("vi-VN") })}
           </p>
         )}
       </form>

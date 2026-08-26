@@ -1,15 +1,27 @@
-"""ApiResponse envelope helpers: {success, message, data}."""
+"""Response envelope helpers: {data} / {data, meta} / {error: {code, message, details}}."""
 from datetime import datetime
 
 from rest_framework.response import Response
 
 
-def ok(message: str, data=None, status: int = 200) -> Response:
-    return Response({"success": True, "message": message, "data": data}, status=status)
+def data_response(data=None, status: int = 200) -> Response:
+    return Response({"data": data}, status=status)
 
 
-def fail(message: str, data=None, status: int = 400) -> Response:
-    return Response({"success": False, "message": message, "data": data}, status=status)
+def list_response(items: list, page: int, page_size: int, total: int) -> Response:
+    return Response(
+        {"data": items, "meta": {"page": page, "pageSize": page_size, "total": total}},
+        status=200,
+    )
+
+
+def error_response(
+    code: str, message: str, details=None, status: int = 400
+) -> Response:
+    error = {"code": code, "message": message}
+    if details is not None:
+        error["details"] = details
+    return Response({"error": error}, status=status)
 
 
 def iso_utc(value: datetime) -> str:

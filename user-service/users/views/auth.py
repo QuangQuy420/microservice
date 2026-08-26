@@ -13,7 +13,7 @@ from ..errors import ApiError
 from ..jwt_utils import issue_token
 from ..models import PasswordResetToken, Profile, Role, User, UserRole
 from ..presenters import user_response
-from ..responses import ok
+from ..responses import data_response
 from ..security import check_password, hash_password
 from ..serializers import (
     ForgotPasswordSerializer,
@@ -61,7 +61,7 @@ class RegisterView(PublicAPIView):
             )
             UserRole.objects.create(user=user, role=customer_role)
 
-        return ok("Đăng ký tài khoản thành công", user_response(user), status=201)
+        return data_response(user_response(user), status=201)
 
 
 class LoginView(PublicAPIView):
@@ -85,14 +85,13 @@ class LoginView(PublicAPIView):
             raise ApiError("INVALID_CREDENTIALS")
 
         token, expires_in_seconds = issue_token(user)
-        return ok(
-            "Đăng nhập thành công",
+        return data_response(
             {
                 "accessToken": token,
                 "tokenType": "Bearer",
                 "expiresIn": expires_in_seconds,
                 "user": user_response(user),
-            },
+            }
         )
 
 
@@ -118,7 +117,7 @@ class ForgotPasswordView(PublicAPIView):
             # production with real users.
             logger.info("Password reset token for %s: %s", email, raw_token)
 
-        return ok("Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được tạo", None)
+        return data_response(None)
 
 
 class ResetPasswordView(PublicAPIView):
@@ -152,4 +151,4 @@ class ResetPasswordView(PublicAPIView):
             reset_token.used_at = datetime.now(timezone.utc)
             reset_token.save(update_fields=["used_at", "updated_at"])
 
-        return ok("Đặt lại mật khẩu thành công", None)
+        return data_response(None)

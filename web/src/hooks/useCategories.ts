@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getCategories } from "@/lib/api";
+import { getCategories, useApiError } from "@/lib/api";
 import type { Category } from "@/types/category";
 
 interface UseCategoriesResult {
@@ -14,6 +14,7 @@ export function useCategories(): UseCategoriesResult {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const translateError = useApiError();
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,7 @@ export function useCategories(): UseCategoriesResult {
         if (!cancelled) setCategories(result);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải danh mục.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -38,7 +39,7 @@ export function useCategories(): UseCategoriesResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [translateError]);
 
   return { categories, isLoading, error };
 }

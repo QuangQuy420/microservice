@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getOrders } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { getOrders, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import type { GetOrdersParams, OrderPageResponse, OrderSummary } from "@/types/order";
+
+// Paging defaults for when the caller passes none and the response carries no `meta` (an
+// unpaginated body) — `page` is 1-based, matching the `{data, meta}` envelope.
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
 
 interface UseOrdersResult {
   orders: OrderSummary[];
   page: number;
+  pageSize: number;
+  total: number;
   totalPages: number;
-  totalElements: number;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -18,28 +25,30 @@ interface UseOrdersResult {
 // Order history is always for the logged-in user — reads the access token itself, same as
 // useCart. See useProducts.ts for the state/effect/cancellation pattern this mirrors.
 export function useOrders(params: GetOrdersParams): UseOrdersResult {
+  const t = useTranslations("orders");
+  const translateError = useApiError();
   const [response, setResponse] = useState<OrderPageResponse<OrderSummary> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { status, page, size } = params;
+  const { status, page, pageSize } = params;
 
   async function run() {
     const token = getAccessToken();
     if (!token) {
       setResponse(null);
       setIsLoading(false);
-      setError("Bạn cần đăng nhập để xem lịch sử đơn hàng.");
+      setError(t("loginRequired"));
       return;
     }
 
     setIsLoading(true);
     setError(null);
     try {
-      const result = await getOrders(token, { status, page, size });
+      const result = await getOrders(token, { status, page, pageSize });
       setResponse(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể tải danh sách đơn hàng.");
+      setError(translateError(err));
     } finally {
       setIsLoading(false);
     }
@@ -54,7 +63,7 @@ export function useOrders(params: GetOrdersParams): UseOrdersResult {
         if (!cancelled) {
           setResponse(null);
           setIsLoading(false);
-          setError("Bạn cần đăng nhập để xem lịch sử đơn hàng.");
+          setError(t("loginRequired"));
         }
         return;
       }
@@ -62,11 +71,11 @@ export function useOrders(params: GetOrdersParams): UseOrdersResult {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await getOrders(token, { status, page, size });
+        const result = await getOrders(token, { status, page, pageSize });
         if (!cancelled) setResponse(result);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải danh sách đơn hàng.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -78,13 +87,20 @@ export function useOrders(params: GetOrdersParams): UseOrdersResult {
     return () => {
       cancelled = true;
     };
-  }, [status, page, size]);
+  }, [status, page, pageSize, t, translateError]);
+
+  // `meta` is what the server actually paged by, so it wins over the requested params; both are
+  // absent only before the first successful response (or on an unpaginated body).
+  const meta = response?.meta;
+  const resolvedPageSize = meta?.pageSize ?? pageSize ?? DEFAULT_PAGE_SIZE;
+  const total = meta?.total ?? 0;
 
   return {
-    orders: response?.content ?? [],
-    page: response?.page ?? 0,
-    totalPages: response?.totalPages ?? 0,
-    totalElements: response?.totalElements ?? 0,
+    orders: response?.data ?? [],
+    page: meta?.page ?? page ?? DEFAULT_PAGE,
+    pageSize: resolvedPageSize,
+    total,
+    totalPages: resolvedPageSize > 0 ? Math.ceil(total / resolvedPageSize) : 0,
     isLoading,
     error,
     refetch: run,

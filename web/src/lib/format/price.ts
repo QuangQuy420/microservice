@@ -5,6 +5,5 @@ export function formatPriceVnd(basePrice: number): string {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(basePrice);
 }
 
-// Frame/face-shape labels live in @/lib/labels (formatFrameShapeVi/formatFaceShapeVi) — the
-// storefront's UI is Vietnamese throughout (see CLAUDE.md), so there is no separate English
-// label set here anymore.
+// Frame/face-shape labels live in @/lib/labels (useLabels()), which reads them from the active
+// locale's message file — there is no per-language label map in code.

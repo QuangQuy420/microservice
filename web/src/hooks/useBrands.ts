@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, getBrands } from "@/lib/api";
+import { getBrands, useApiError } from "@/lib/api";
 import type { Brand } from "@/types/product";
 
 interface UseBrandsResult {
@@ -14,6 +14,7 @@ export function useBrands(): UseBrandsResult {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const translateError = useApiError();
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,7 @@ export function useBrands(): UseBrandsResult {
         if (!cancelled) setBrands(result);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Không thể tải thương hiệu.");
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -38,7 +39,7 @@ export function useBrands(): UseBrandsResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [translateError]);
 
   return { brands, isLoading, error };
 }

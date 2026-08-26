@@ -17,12 +17,15 @@ export interface StockShortage {
 /** Thrown by `reserve()` when at least one item can't be fully reserved (all-or-nothing). */
 export class InsufficientStockError extends Error {
   constructor(public readonly shortages: StockShortage[]) {
+    // This message travels verbatim as the saga's `stock.reserve.rejected` `reason`
+    // (English by decision 9) and lands in order-service's order history notes.
     super(
-      `Không đủ hàng cho biến thể: ${shortages
+      shortages
         .map(
-          (s) => `${s.variantId} (yêu cầu ${s.requested}, còn ${s.available})`,
+          (s) =>
+            `Insufficient stock for variant ${s.variantId} (requested ${s.requested}, available ${s.available})`,
         )
-        .join('; ')}`,
+        .join('; '),
     );
     this.name = 'InsufficientStockError';
   }

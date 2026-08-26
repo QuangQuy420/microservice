@@ -7,7 +7,7 @@ import type {
   OrderPageResponse,
   OrderSummary,
 } from "@/types/order";
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchList } from "./client";
 
 // Calls api-gateway's orders proxy (api-gateway/src/routes/orders.controller.ts's
 // OrdersController, @Controller('api/orders')), which forwards to order-service's
@@ -35,16 +35,13 @@ export function getOrders(
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.page !== undefined) query.set("page", String(params.page));
-  if (params.size !== undefined) query.set("size", String(params.size));
+  if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
 
   const queryString = query.toString();
-  return apiFetch<OrderPageResponse<OrderSummary>>(
-    `/orders${queryString ? `?${queryString}` : ""}`,
-    {
-      method: "GET",
-      headers: authHeaders(token),
-    },
-  );
+  return apiFetchList<OrderSummary>(`/orders${queryString ? `?${queryString}` : ""}`, {
+    method: "GET",
+    headers: authHeaders(token),
+  });
 }
 
 export function getOrderById(token: string, id: string): Promise<Order> {

@@ -4,8 +4,6 @@ transactionCode and the reconciliation flags are internal — never exposed.
 """
 from __future__ import annotations
 
-import math
-
 from app.models import Order, OrderItem, OrderSagaLog, OrderStatusHistory
 
 
@@ -71,16 +69,11 @@ def order_summary_response(order: Order) -> dict:
     }
 
 
-def page_response(content: list, page: int, size: int, total_elements: int) -> dict:
-    total_pages = math.ceil(total_elements / size) if total_elements else 0
+def page_response(content: list, page: int, page_size: int, total: int) -> dict:
+    """Already the full list envelope — routers return it as-is (no extra wrap)."""
     return {
-        "content": content,
-        "page": page,
-        "size": size,
-        "totalElements": total_elements,
-        "totalPages": total_pages,
-        "first": page == 0,
-        "last": page >= total_pages - 1 if total_pages else True,
+        "data": content,
+        "meta": {"page": page, "pageSize": page_size, "total": total},
     }
 
 

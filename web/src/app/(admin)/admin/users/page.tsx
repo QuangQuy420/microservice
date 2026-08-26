@@ -1,12 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import {
-    ApiError,
     assignRoleToUser,
     listRoles,
     listUsers,
     removeRoleFromUser,
+    useApiError,
     type AdminUser,
 } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -27,8 +28,12 @@ const ROW_BODY = "border-t border-[rgba(43,36,32,0.08)] text-sm";
 // "manage roles" modal per user that assigns/removes roles via a multi-select, reusing
 // assignRoleToUser/removeRoleFromUser (already implemented) and listRoles to populate the
 // picker. Modeled on admin/products/page.tsx's search+table layout and admin/roles/page.tsx's
-// modal-based edit pattern.
+// modal-based edit pattern. Paging is 1-based (`meta.page`); `totalPages` is derived from
+// meta.total/meta.pageSize since the envelope no longer carries it.
 export default function AdminUsersPage() {
+    const t = useTranslations("admin");
+    const translateError = useApiError();
+
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -47,21 +52,21 @@ export default function AdminUsersPage() {
 
         const token = getAccessToken();
         if (!token) {
-            setLoadError("Vui lòng đăng nhập lại.");
+            setLoadError(t("users.sessionExpired"));
             setIsLoading(false);
             return;
         }
 
         try {
             const response = await listUsers(token, targetPage, PAGE_SIZE);
-            setUsers(response.data.items);
-            setTotal(response.data.total);
-            setTotalPages(response.data.totalPages);
-            setPage(response.data.page);
+            const pageSize = response.meta?.pageSize ?? PAGE_SIZE;
+            const totalCount = response.meta?.total ?? response.data.length;
+            setUsers(response.data);
+            setTotal(totalCount);
+            setTotalPages(pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1);
+            setPage(response.meta?.page ?? targetPage);
         } catch (err) {
-            setLoadError(
-                err instanceof ApiError ? err.message : "Không thể tải danh sách người dùng.",
-            );
+            setLoadError(translateError(err));
         } finally {
             setIsLoading(false);
         }
@@ -77,7 +82,7 @@ export default function AdminUsersPage() {
             const token = getAccessToken();
             if (!token) {
                 if (!cancelled) {
-                    setLoadError("Vui lòng đăng nhập lại.");
+                    setLoadError(t("users.sessionExpired"));
                     setIsLoading(false);
                 }
                 return;
@@ -86,18 +91,18 @@ export default function AdminUsersPage() {
             try {
                 const response = await listUsers(token, page, PAGE_SIZE);
                 if (!cancelled) {
-                    setUsers(response.data.items);
-                    setTotal(response.data.total);
-                    setTotalPages(response.data.totalPages);
-                    setPage(response.data.page);
+                    const pageSize = response.meta?.pageSize ?? PAGE_SIZE;
+                    const totalCount = response.meta?.total ?? response.data.length;
+                    setUsers(response.data);
+                    setTotal(totalCount);
+                    setTotalPages(
+                        pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1,
+                    );
+                    setPage(response.meta?.page ?? page);
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setLoadError(
-                        err instanceof ApiError
-                            ? err.message
-                            : "Không thể tải danh sách người dùng.",
-                    );
+                    setLoadError(translateError(err));
                 }
             } finally {
                 if (!cancelled) setIsLoading(false);
@@ -109,7 +114,7 @@ export default function AdminUsersPage() {
         return () => {
             cancelled = true;
         };
-    }, [page]);
+    }, [page, t, translateError]);
 
     useEffect(() => {
         let cancelled = false;
@@ -119,14 +124,10 @@ export default function AdminUsersPage() {
             if (!token) return;
             try {
                 const response = await listRoles(token);
-                if (!cancelled) setRoles(response.data);
+                if (!cancelled) setRoles(response);
             } catch (err) {
                 if (!cancelled) {
-                    setRolesError(
-                        err instanceof ApiError
-                            ? err.message
-                            : "Không thể tải danh sách vai trò.",
-                    );
+                    setRolesError(translateError(err));
                 }
             }
         }
@@ -136,12 +137,12 @@ export default function AdminUsersPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [translateError]);
 
     return (
         <>
             <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
-                <div className="font-heading text-[1.35rem] font-semibold">Quản lý khách hàng</div>
+                <div className="font-heading text-[1.35rem] font-semibold">{t("users.title")}</div>
                 <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
                     AD
                 </div>
@@ -150,14 +151,14 @@ export default function AdminUsersPage() {
             <section className="p-7">
                 {rolesError && <ErrorState message={rolesError} />}
 
-                {isLoading && <LoadingState label="Đang tải người dùng..." />}
+                {isLoading && <LoadingState label={t("users.loading")} />}
                 {!isLoading && loadError && <ErrorState message={loadError} />}
                 {!isLoading && !loadError && (
                     <div className="overflow-hidden rounded-lg border border-border bg-surface">
                         <div className={cn(ROW, ROW_HEAD)}>
-                            <span>Email</span>
-                            <span>Tên đăng nhập</span>
-                            <span>Vai trò</span>
+                            <span>{t("users.columnEmail")}</span>
+                            <span>{t("users.columnUsername")}</span>
+                            <span>{t("users.columnRoles")}</span>
                             <span></span>
                         </div>
                         {users.map((user) => (
@@ -165,7 +166,9 @@ export default function AdminUsersPage() {
                                 <span>{user.email}</span>
                                 <span>{user.username}</span>
                                 <span>
-                                    {user.roles.length > 0 ? user.roles.join(", ") : "Chưa có vai trò"}
+                                    {user.roles.length > 0
+                                        ? user.roles.join(", ")
+                                        : t("users.noRoles")}
                                 </span>
                                 <div className="flex justify-end gap-2">
                                     <button
@@ -173,14 +176,14 @@ export default function AdminUsersPage() {
                                         className="btn btn-outline btn-small"
                                         onClick={() => setManagingUser(user)}
                                     >
-                                        Quản lý vai trò
+                                        {t("users.manageRoles")}
                                     </button>
                                 </div>
                             </div>
                         ))}
                         {users.length === 0 && (
                             <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
-                                Chưa có người dùng nào.
+                                {t("users.empty")}
                             </div>
                         )}
                     </div>
@@ -194,18 +197,16 @@ export default function AdminUsersPage() {
                             onClick={() => run(Math.max(1, page - 1))}
                             disabled={page <= 1}
                         >
-                            Trang trước
+                            {t("users.previousPage")}
                         </button>
-                        <span>
-                            Trang {page} / {totalPages} ({total} người dùng)
-                        </span>
+                        <span>{t("users.pageInfo", { page, totalPages, total })}</span>
                         <button
                             type="button"
                             className="btn btn-outline btn-small"
                             onClick={() => run(Math.min(totalPages, page + 1))}
                             disabled={page >= totalPages}
                         >
-                            Trang sau
+                            {t("users.nextPage")}
                         </button>
                     </div>
                 )}
@@ -236,6 +237,10 @@ interface ManageUserRolesModalProps {
 }
 
 function ManageUserRolesModal({ user, roles, onClose, onChanged }: ManageUserRolesModalProps) {
+    const t = useTranslations("admin");
+    const common = useTranslations("common");
+    const translateError = useApiError();
+
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [pendingRoleId, setPendingRoleId] = useState<string | null>(null);
 
@@ -246,7 +251,7 @@ function ManageUserRolesModal({ user, roles, onClose, onChanged }: ManageUserRol
     async function handleToggle(role: Role) {
         const token = getAccessToken();
         if (!token) {
-            setSubmitError("Bạn cần đăng nhập lại để thực hiện thao tác này.");
+            setSubmitError(t("users.modal.loginRequired"));
             return;
         }
 
@@ -257,11 +262,9 @@ function ManageUserRolesModal({ user, roles, onClose, onChanged }: ManageUserRol
             const response = isAssigned
                 ? await removeRoleFromUser(token, user.id, role.id)
                 : await assignRoleToUser(token, user.id, role.id);
-            await onChanged(response.data);
+            await onChanged(response);
         } catch (err) {
-            setSubmitError(
-                err instanceof ApiError ? err.message : "Không thể cập nhật vai trò. Vui lòng thử lại.",
-            );
+            setSubmitError(translateError(err));
         } finally {
             setPendingRoleId(null);
         }
@@ -282,24 +285,24 @@ function ManageUserRolesModal({ user, roles, onClose, onChanged }: ManageUserRol
             >
                 <div className="mb-3 flex items-center justify-between gap-4">
                     <h2 id="manage-user-roles-heading" className="font-heading text-[1.3rem] text-text">
-                        Quản lý vai trò — {user.email}
+                        {t("users.modal.heading", { email: user.email })}
                     </h2>
                     <button
                         type="button"
                         className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[1.4rem] leading-none text-text-muted hover:bg-[rgba(43,36,32,0.06)] hover:text-text"
                         onClick={onClose}
-                        aria-label="Đóng"
+                        aria-label={common("close")}
                     >
                         ×
                     </button>
                 </div>
 
-                <section aria-label="Chọn vai trò" className="mb-5">
+                <section aria-label={t("users.modal.selectRolesLabel")} className="mb-5">
                     <p className="mb-[0.6rem] text-[0.78rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
-                        Vai trò
+                        {t("users.modal.rolesLabel")}
                     </p>
                     {roles.length === 0 ? (
-                        <p className="my-[1em]">Chưa có vai trò nào trong hệ thống.</p>
+                        <p className="my-[1em]">{t("users.modal.noRolesInSystem")}</p>
                     ) : (
                         <ul className="grid gap-2.5">
                             {roles.map((role) => (
@@ -336,7 +339,7 @@ function ManageUserRolesModal({ user, roles, onClose, onChanged }: ManageUserRol
 
                 <div className="mt-6 flex gap-3">
                     <button type="button" className="btn btn-primary flex-1" onClick={onClose}>
-                        Xong
+                        {t("users.modal.done")}
                     </button>
                 </div>
             </div>

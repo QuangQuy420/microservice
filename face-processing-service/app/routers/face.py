@@ -10,9 +10,10 @@ forwards this header — this service does not re-verify the JWT itself (Q4).
 """
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Header, UploadFile, status
 
-from app.schemas.face import AnalyzeResponse
+from app.errors import BadRequestError, NotFoundError, UnprocessableError
+from app.schemas.face import AnalysisListEnvelope, AnalyzeEnvelope
 from app.services.face_analysis_service import (
     FaceAnalysisService,
     HistoryItemNotFoundError,
@@ -35,16 +36,12 @@ def _require_user_id(x_user_id: str | None) -> uuid.UUID:
     missing or not a valid UUID — gateway guarantees it's present, but the router still
     validates defensively (Q4: this service trusts, but does not skip presence checks)."""
     if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Thiếu header bắt buộc 'X-User-Id'.",
-        )
+        raise BadRequestError("MISSING_HEADER", "Required header 'X-User-Id' is missing.")
     try:
         return uuid.UUID(x_user_id)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Header 'X-User-Id' phải là UUID hợp lệ.",
+        raise BadRequestError(
+            "MALFORMED_REQUEST", "Header 'X-User-Id' must be a valid UUID."
         ) from exc
 
 
@@ -53,49 +50,50 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@router.post("/analyze", response_model=AnalyzeResponse)
+@router.post("/analyze", response_model=AnalyzeEnvelope)
 async def analyze(
     file: UploadFile,
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     service: FaceAnalysisService = Depends(get_face_analysis_service),
-) -> AnalyzeResponse:
+) -> AnalyzeEnvelope:
     user_id = _require_user_id(x_user_id)
 
     if file.content_type not in _ALLOWED_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Định dạng tệp '{file.content_type}' không được hỗ trợ — "
-                "chỉ chấp nhận image/jpeg, image/png, hoặc image/webp."
+        raise UnprocessableError(
+            "FILE_TYPE_INVALID",
+            (
+                f"File type '{file.content_type}' is not supported — "
+                "only image/jpeg, image/png, or image/webp are accepted."
             ),
         )
 
     data = await file.read()
     if len(data) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ảnh quá lớn — dung lượng tối đa cho phép là 10MB.",
+        raise UnprocessableError(
+            "FILE_TOO_LARGE", "Image is too large — the maximum allowed size is 10MB."
         )
 
     try:
-        return await service.analyze_and_store(
+        result = await service.analyze_and_store(
             user_id=user_id, data=data, filename=file.filename, content_type=file.content_type
         )
     except NoFaceDetectedError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise UnprocessableError("NO_FACE_DETECTED", str(exc)) from exc
     except MultipleFacesDetectedError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise UnprocessableError("MULTIPLE_FACES_DETECTED", str(exc)) from exc
     except InvalidImageError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise UnprocessableError("INVALID_IMAGE", str(exc)) from exc
+
+    return AnalyzeEnvelope(data=result)
 
 
-@router.get("/analyses", response_model=list[AnalyzeResponse])
+@router.get("/analyses", response_model=AnalysisListEnvelope)
 async def list_analyses(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     service: FaceAnalysisService = Depends(get_face_analysis_service),
-) -> list[AnalyzeResponse]:
+) -> AnalysisListEnvelope:
     user_id = _require_user_id(x_user_id)
-    return await service.list_history(user_id)
+    return AnalysisListEnvelope(data=await service.list_history(user_id))
 
 
 @router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -108,7 +106,4 @@ async def delete_analysis(
     try:
         await service.delete_history_item(user_id=user_id, analysis_id=analysis_id)
     except HistoryItemNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Không tìm thấy lịch sử phân tích.",
-        ) from exc
+        raise NotFoundError("ANALYSIS_NOT_FOUND", "Face analysis not found.") from exc

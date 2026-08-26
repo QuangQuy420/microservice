@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { AdminGuard, useAdminProfile } from "@/components/admin/AdminGuard";
 import { cn } from "@/lib/cn";
 import { removeAccessToken } from "@/lib/auth/session";
@@ -9,19 +10,21 @@ import { removeAccessToken } from "@/lib/auth/session";
 const SIDEBAR_LINK =
   "flex items-center gap-[0.6rem] rounded-md px-3 py-2.5 text-sm font-medium no-underline";
 
+// Only the translation key lives here — the href stays in the code, and the visible label is
+// resolved with t() at render time.
 const NAV_ITEMS = [
-  { label: "Tổng quan", href: "/admin" },
-  { label: "Sản phẩm", href: "/admin/products" },
-  { label: "Đơn hàng", href: "/admin/orders" },
-  { label: "Nhật ký xử lý đơn hàng", href: "/admin/saga-logs" },
-  { label: "Khách hàng", href: "/admin/users" },
-  { label: "Vai trò", href: "/admin/roles" },
-  { label: "Cài đặt", href: "/admin/settings" },
+  { labelKey: "nav.overview", href: "/admin" },
+  { labelKey: "nav.products", href: "/admin/products" },
+  { labelKey: "nav.orders", href: "/admin/orders" },
+  { labelKey: "nav.sagaLogs", href: "/admin/saga-logs" },
+  { labelKey: "nav.users", href: "/admin/users" },
+  { labelKey: "nav.roles", href: "/admin/roles" },
+  { labelKey: "nav.settings", href: "/admin/settings" },
 ];
 
 const CATALOG_NAV_ITEMS = [
-  { label: "Thương hiệu", href: "/admin/brands" },
-  { label: "Danh mục", href: "/admin/categories" },
+  { labelKey: "nav.brands", href: "/admin/brands" },
+  { labelKey: "nav.categories", href: "/admin/categories" },
 ];
 
 export default function AdminLayout({
@@ -50,6 +53,8 @@ function AdminLayoutContent({
   pathname: string;
   onLogout: () => void;
 }) {
+  const t = useTranslations("admin");
+  const tNav = useTranslations("nav");
   const profile = useAdminProfile();
   const isAdmin = profile?.roles.some((role) => role.toUpperCase() === "ADMIN");
   const navItems = isAdmin ? [...NAV_ITEMS, ...CATALOG_NAV_ITEMS] : CATALOG_NAV_ITEMS;
@@ -60,13 +65,13 @@ function AdminLayoutContent({
             <div className="mb-3 border-b border-[rgba(247,243,236,0.12)] px-[1.4rem] pb-6 font-heading text-[1.2rem] font-semibold tracking-[0.06em]">
               SMART EYEWEAR
               <div className="mt-1 text-[0.7rem] font-normal tracking-[0.08em] text-[#c9b8a6]">
-                QUẢN TRỊ
+                {t("nav.panelSubtitle")}
               </div>
             </div>
 
             <nav className="flex flex-col gap-[2px] px-3">
               {navItems.map((item) => {
-                // "/admin" (Tổng quan) is a prefix of every other admin route, so it needs an
+                // "/admin" (the overview) is a prefix of every other admin route, so it needs an
                 // exact match — otherwise it would also light up on /admin/products etc.
                 const active =
                     item.href === "/admin"
@@ -75,14 +80,14 @@ function AdminLayoutContent({
 
                 return (
                     <Link
-                        key={item.label}
+                        key={item.href}
                         href={item.href}
                         className={cn(
                             SIDEBAR_LINK,
                             active ? "bg-accent text-text" : "text-[#e6dccf]",
                         )}
                     >
-                      {item.label}
+                      {t(item.labelKey)}
                     </Link>
                 );
               })}
@@ -93,7 +98,7 @@ function AdminLayoutContent({
                   href="/"
                   className={cn(SIDEBAR_LINK, "text-[#e6dccf]")}
               >
-                Về cửa hàng
+                {t("nav.backToStore")}
               </Link>
 
               <button
@@ -101,7 +106,7 @@ function AdminLayoutContent({
                   className="flex w-full cursor-pointer rounded-md border-0 bg-transparent px-3 py-2.5 text-left font-body text-sm font-medium text-[#e6dccf] hover:bg-[rgba(247,243,236,0.08)] hover:text-white"
                   onClick={onLogout}
               >
-                Đăng xuất
+                {tNav("logout")}
               </button>
             </div>
           </aside>

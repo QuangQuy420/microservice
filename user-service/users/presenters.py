@@ -26,6 +26,7 @@ def profile_response(user: User, profile: Profile) -> dict:
         "avatarUrl": profile.avatar_url,
         "address": profile.address,
         "dateOfBirth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+        "preferredLanguage": profile.preferred_language,
     }
 
 

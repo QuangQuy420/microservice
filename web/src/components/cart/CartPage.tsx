@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { ErrorState } from "@/components/common/ErrorState";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { LoadingState } from "@/components/common/LoadingState";
 import { dispatchCartChange, useCart } from "@/hooks/useCart";
-import { ApiError, removeCartItem, updateCartItem } from "@/lib/api";
+import { removeCartItem, updateCartItem, useApiError } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { getColorSwatch } from "@/lib/format/color";
 import { formatPriceVnd } from "@/lib/format/price";
@@ -25,10 +26,12 @@ const STEPPER_BUTTON =
 // mutation, keeping the Header badge and this page's own useCart() in sync.
 //
 // T-checkout-select: checkout is per-selection, not "always the whole cart" — the user ticks
-// which items to pay for, the total only reflects those, and "Tiến hành thanh toán" carries the
+// which items to pay for, the total only reflects those, and the checkout button carries the
 // selected variantIds to /checkout via the query string (CheckoutPage reads them back out;
 // order-service only ever sees the selected subset, see CheckoutPayload.variantIds).
 export function CartPage() {
+  const t = useTranslations("cart");
+  const translateError = useApiError();
   const { cart, isLoading, error, refetch } = useCart();
   const [mutatingVariantId, setMutatingVariantId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -57,9 +60,7 @@ export function CartPage() {
       dispatchCartChange();
       await refetch();
     } catch (err) {
-      setMutationError(
-        err instanceof ApiError ? err.message : "Không thể cập nhật số lượng sản phẩm.",
-      );
+      setMutationError(translateError(err));
     } finally {
       setMutatingVariantId(null);
     }
@@ -76,15 +77,13 @@ export function CartPage() {
       dispatchCartChange();
       await refetch();
     } catch (err) {
-      setMutationError(
-        err instanceof ApiError ? err.message : "Không thể xóa sản phẩm khỏi giỏ hàng.",
-      );
+      setMutationError(translateError(err));
     } finally {
       setMutatingVariantId(null);
     }
   }
 
-  if (isLoading) return <LoadingState label="Đang tải giỏ hàng..." />;
+  if (isLoading) return <LoadingState label={t("loading")} />;
   if (error) return <ErrorState message={error} />;
 
   const items = cart?.items ?? [];
@@ -106,12 +105,12 @@ export function CartPage() {
       className="mx-auto max-w-[1050px] py-[clamp(1.5rem,4vw,3rem)]"
     >
       <h1 id="cart-heading" className="mb-5 font-heading text-[clamp(1.75rem,3vw,2.25rem)] text-text">
-        Giỏ hàng của bạn
+        {t("title")}
       </h1>
 
       {items.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-[clamp(1.5rem,4vw,2.5rem)] text-center text-text-muted">
-          Giỏ hàng của bạn đang trống. Hãy khám phá sản phẩm và thêm vào giỏ hàng.
+          {t("empty")}
         </p>
       ) : (
         <>
@@ -127,9 +126,9 @@ export function CartPage() {
               className="h-[18px] w-[18px] cursor-pointer"
               checked={allSelected}
               onChange={toggleSelectAll}
-              aria-label="Chọn tất cả sản phẩm"
+              aria-label={t("selectAllAria")}
             />
-            Chọn tất cả
+            {t("selectAll")}
           </label>
 
           <ul className="mb-6 flex flex-col gap-4">
@@ -143,7 +142,7 @@ export function CartPage() {
                   className="h-[18px] w-[18px] cursor-pointer max-[700px]:[grid-area:checkbox]"
                   checked={selectedVariantIds.has(item.variantId)}
                   onChange={() => toggleSelected(item.variantId)}
-                  aria-label={`Chọn ${item.productName}`}
+                  aria-label={t("selectItemAria", { name: item.productName })}
                 />
 
                 {item.productImageUrl ? (
@@ -169,7 +168,7 @@ export function CartPage() {
                       aria-label={item.color}
                       title={item.color}
                     />
-                    Màu: {item.color} · Kích thước: {item.size}
+                    {t("itemColorSize", { color: item.color, size: item.size })}
                   </p>
                   <p className="text-[0.9rem] font-semibold text-text-secondary">
                     {formatPriceVnd(item.unitPrice)}
@@ -182,7 +181,7 @@ export function CartPage() {
                     className={STEPPER_BUTTON}
                     onClick={() => handleUpdateQuantity(item.variantId, item.quantity - 1)}
                     disabled={mutatingVariantId === item.variantId || item.quantity <= 1}
-                    aria-label={`Giảm số lượng ${item.productName}`}
+                    aria-label={t("decreaseQuantityAria", { name: item.productName })}
                   >
                     −
                   </button>
@@ -197,7 +196,7 @@ export function CartPage() {
                     className={STEPPER_BUTTON}
                     onClick={() => handleUpdateQuantity(item.variantId, item.quantity + 1)}
                     disabled={mutatingVariantId === item.variantId || item.quantity >= 99}
-                    aria-label={`Tăng số lượng ${item.productName}`}
+                    aria-label={t("increaseQuantityAria", { name: item.productName })}
                   >
                     +
                   </button>
@@ -213,7 +212,7 @@ export function CartPage() {
                   onClick={() => handleRemove(item.variantId)}
                   disabled={mutatingVariantId === item.variantId}
                 >
-                  Xóa
+                  {t("remove")}
                 </button>
               </li>
             ))}
@@ -222,12 +221,12 @@ export function CartPage() {
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-surface px-[clamp(1.2rem,3vw,1.75rem)] py-5 shadow-[0_14px_36px_rgba(43,36,32,0.06)] max-[700px]:flex-col max-[700px]:items-stretch max-[700px]:text-center">
             {selectedCount > 0 ? (
               <p className="text-[1.05rem] text-text-secondary">
-                Tổng cộng ({selectedCount} sản phẩm):{" "}
+                {t("total", { count: selectedCount })}{" "}
                 <strong className="text-[1.2rem] text-text">{formatPriceVnd(selectedTotal)}</strong>
               </p>
             ) : (
               <p className="text-[1.05rem] text-text-muted italic">
-                Chọn sản phẩm để xem tổng tiền
+                {t("selectPrompt")}
               </p>
             )}
             {selectedCount > 0 ? (
@@ -237,11 +236,11 @@ export function CartPage() {
                   .join(",")}`}
                 className="btn btn-primary"
               >
-                Tiến hành thanh toán
+                {t("checkout")}
               </Link>
             ) : (
               <button type="button" className="btn btn-primary" disabled>
-                Tiến hành thanh toán
+                {t("checkout")}
               </button>
             )}
           </div>

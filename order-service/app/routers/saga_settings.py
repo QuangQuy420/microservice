@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/v1/admin/saga-settings")
 
 @router.get("")
 def get_settings(session: Session = Depends(get_session)):
-    return VNJSONResponse(content=settings_service.get_settings(session))
+    return VNJSONResponse(content={"data": settings_service.get_settings(session)})
 
 
 @router.put("")
@@ -23,5 +23,5 @@ def update_settings(
     user_id: str = Depends(require_user_id_header),
 ):
     return VNJSONResponse(
-        content=settings_service.update_settings(session, body, user_id)
+        content={"data": settings_service.update_settings(session, body, user_id)}
     )

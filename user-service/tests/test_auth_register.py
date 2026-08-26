@@ -12,10 +12,7 @@ pytestmark = pytest.mark.django_db
 def test_register_success(client):
     response = register(client)
     assert response.status_code == 201
-    body = response.data
-    assert body["success"] is True
-    assert body["message"] == "Đăng ký tài khoản thành công"
-    data = body["data"]
+    data = response.data["data"]
     assert set(data.keys()) == {"id", "email", "username", "roles", "status"}
     uuid.UUID(data["id"])  # valid UUID
     assert data["email"] == "user1@example.com"
@@ -52,9 +49,7 @@ def test_register_duplicate_email(client):
     response = register(client, username="other_user")
     assert response.status_code == 409
     assert response.data == {
-        "success": False,
-        "message": "Email đã được sử dụng",
-        "data": None,
+        "error": {"code": "EMAIL_ALREADY_EXISTS", "message": "Email already exists"}
     }
 
 
@@ -62,7 +57,7 @@ def test_register_duplicate_email_case_insensitive(client):
     register(client)
     response = register(client, email="USER1@EXAMPLE.COM", username="other_user")
     assert response.status_code == 409
-    assert response.data["message"] == "Email đã được sử dụng"
+    assert response.data["error"]["code"] == "EMAIL_ALREADY_EXISTS"
 
 
 def test_register_duplicate_username(client):
@@ -70,9 +65,10 @@ def test_register_duplicate_username(client):
     response = register(client, email="other@example.com")
     assert response.status_code == 409
     assert response.data == {
-        "success": False,
-        "message": "Username đã được sử dụng",
-        "data": None,
+        "error": {
+            "code": "USERNAME_ALREADY_EXISTS",
+            "message": "Username already exists",
+        }
     }
 
 
@@ -95,18 +91,19 @@ def test_register_duplicate_username(client):
 )
 def test_register_validation_errors(client, overrides, bad_field):
     response = register(client, **overrides)
-    assert response.status_code == 400
-    body = response.data
-    assert body["success"] is False
-    assert body["message"] == "Dữ liệu đầu vào không hợp lệ"
-    assert bad_field in body["data"]
-    assert isinstance(body["data"][bad_field], str)  # first message only
+    assert response.status_code == 422
+    error = response.data["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert bad_field in error["details"]
+    # details are ALWAYS arrays of messages keyed by field
+    assert isinstance(error["details"][bad_field], list)
 
 
 def test_register_missing_fields(client):
     response = client.post("/api/v1/auth/register", {})
-    assert response.status_code == 400
-    assert response.data["message"] == "Dữ liệu đầu vào không hợp lệ"
+    assert response.status_code == 422
+    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    details = response.data["error"]["details"]
     for field in ("email", "username", "password", "fullName"):
-        assert field in response.data["data"]
-    assert "phone" not in response.data["data"]  # optional
+        assert field in details
+    assert "phone" not in details  # optional

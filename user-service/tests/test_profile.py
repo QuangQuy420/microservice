@@ -4,7 +4,7 @@ from .conftest import bearer, login
 
 pytestmark = pytest.mark.django_db
 
-INVALID_TOKEN_MESSAGE = "Token không hợp lệ hoặc đã hết hạn"
+INVALID_TOKEN_MESSAGE = "Token is invalid or has expired"
 
 
 def get_me(client, token):
@@ -19,16 +19,14 @@ def test_me_requires_token(client, db):
     response = client.get("/api/v1/users/me")
     assert response.status_code == 401
     assert response.data == {
-        "success": False,
-        "message": INVALID_TOKEN_MESSAGE,
-        "data": None,
+        "error": {"code": "INVALID_TOKEN", "message": INVALID_TOKEN_MESSAGE}
     }
 
 
 def test_me_rejects_garbage_token(client, db):
     response = get_me(client, "garbage.token.here")
     assert response.status_code == 401
-    assert response.data["message"] == INVALID_TOKEN_MESSAGE
+    assert response.data["error"]["code"] == "INVALID_TOKEN"
 
 
 def test_me_rejects_non_bearer_scheme(client, customer):
@@ -41,7 +39,6 @@ def test_me_rejects_non_bearer_scheme(client, customer):
 def test_get_me_returns_profile(client, customer):
     response = get_me(client, customer["token"])
     assert response.status_code == 200
-    assert response.data["message"] == "Lấy thông tin cá nhân thành công"
     data = response.data["data"]
     assert set(data.keys()) == {
         "userId",
@@ -55,6 +52,7 @@ def test_get_me_returns_profile(client, customer):
         "avatarUrl",
         "address",
         "dateOfBirth",
+        "preferredLanguage",
     }
     assert data["email"] == "user1@example.com"
     assert data["roles"] == ["CUSTOMER"]
@@ -63,12 +61,12 @@ def test_get_me_returns_profile(client, customer):
     assert data["phone"] == "0912345678"
     assert data["avatarUrl"] is None
     assert data["dateOfBirth"] is None
+    assert data["preferredLanguage"] == "vi"  # default locale
 
 
 def test_put_me_partial_update_only_sent_fields(client, customer):
     response = put_me(client, customer["token"], {"address": "12 Ly Thuong Kiet"})
     assert response.status_code == 200
-    assert response.data["message"] == "Cập nhật thông tin cá nhân thành công"
     data = response.data["data"]
     assert data["address"] == "12 Ly Thuong Kiet"
     assert data["fullName"] == "Nguyen Van A"  # untouched
@@ -110,15 +108,15 @@ def test_put_me_date_of_birth(client, customer):
 
 def test_put_me_date_of_birth_must_be_past(client, customer):
     response = put_me(client, customer["token"], {"dateOfBirth": "2999-01-01"})
-    assert response.status_code == 400
-    assert response.data["message"] == "Dữ liệu đầu vào không hợp lệ"
-    assert "dateOfBirth" in response.data["data"]
+    assert response.status_code == 422
+    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    assert "dateOfBirth" in response.data["error"]["details"]
 
 
 def test_put_me_invalid_phone(client, customer):
     response = put_me(client, customer["token"], {"phone": "12345"})
-    assert response.status_code == 400
-    assert "phone" in response.data["data"]
+    assert response.status_code == 422
+    assert "phone" in response.data["error"]["details"]
 
 
 def test_change_password_success(client, customer):
@@ -128,11 +126,7 @@ def test_change_password_success(client, customer):
         **bearer(customer["token"]),
     )
     assert response.status_code == 200
-    assert response.data == {
-        "success": True,
-        "message": "Đổi mật khẩu thành công",
-        "data": None,
-    }
+    assert response.data == {"data": None}
     assert login(client, "user_one", "Password2new").status_code == 200
     assert login(client, "user_one", "Password1").status_code == 401
 
@@ -144,7 +138,7 @@ def test_change_password_wrong_current(client, customer):
         **bearer(customer["token"]),
     )
     assert response.status_code == 400
-    assert response.data["message"] == "Mật khẩu hiện tại không chính xác"
+    assert response.data["error"]["code"] == "CURRENT_PASSWORD_INCORRECT"
 
 
 def test_change_password_same_as_current(client, customer):
@@ -154,6 +148,4 @@ def test_change_password_same_as_current(client, customer):
         **bearer(customer["token"]),
     )
     assert response.status_code == 400
-    assert (
-        response.data["message"] == "Mật khẩu mới không được giống mật khẩu hiện tại"
-    )
+    assert response.data["error"]["code"] == "NEW_PASSWORD_SAME_AS_CURRENT"

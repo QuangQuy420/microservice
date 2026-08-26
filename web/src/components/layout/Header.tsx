@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useCart } from "@/hooks/useCart";
 import { cn } from "@/lib/cn";
 import { ApiError, getMyProfile } from "@/lib/api";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { isLocale } from "@/i18n/config";
+import { getLocale, saveLocale } from "@/lib/i18n/locale";
 import {
     getAccessToken,
     removeAccessToken,
@@ -48,7 +52,7 @@ const ACCOUNT_MENU_ITEM_DANGER_CLASS = cn(
 const ACCOUNT_MENU_ICON_CLASS = "inline-flex w-[22px] items-center justify-center text-base text-inherit";
 
 // "/" only matches the exact catalog root; every other tab also covers its sub-routes
-// (e.g. "/admin/orders" should still highlight "Quản trị").
+// (e.g. "/admin/orders" should still highlight the admin tab).
 function isNavLinkActive(pathname: string, href: string): boolean {
     if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -67,6 +71,7 @@ export function Header() {
     const router = useRouter();
     const pathname = usePathname();
     const menuRef = useRef<HTMLDivElement>(null);
+    const t = useTranslations("nav");
 
     // Starts false to match the server-rendered markup (no `window` there), then syncs the
     // real value in the effect below — reading localStorage during the initializer instead
@@ -102,12 +107,18 @@ export function Header() {
             }
 
             void getMyProfile(token)
-                .then((response) => {
-                    setRoles(
-                        response.data.roles?.map((r) => r.toUpperCase()) ?? null,
-                    );
-                    setPermissions(response.data.permissions ?? null);
-                    setDisplayName(response.data.fullName || response.data.username);
+                .then((profile) => {
+                    setRoles(profile.roles?.map((r) => r.toUpperCase()) ?? null);
+                    setPermissions(profile.permissions ?? null);
+                    setDisplayName(profile.fullName || profile.username);
+
+                    // FR6/AC2: the account's saved language wins over whatever this browser had
+                    // in its cookie, so a fresh browser applies it right after login. saveLocale
+                    // fires "locale-change", which LocaleSync turns into a soft refresh.
+                    const preferred = profile.preferredLanguage;
+                    if (isLocale(preferred) && preferred !== getLocale()) {
+                        saveLocale(preferred);
+                    }
                 })
                 .catch((error) => {
                     if (!(error instanceof ApiError)) throw error;
@@ -180,14 +191,14 @@ export function Header() {
                     "max-[900px]:[scrollbar-width:none] max-[900px]:[&::-webkit-scrollbar]:hidden",
                     "max-sm:gap-[1.1rem]",
                 )}
-                aria-label="Điều hướng chính"
+                aria-label={t("primaryNavigation")}
             >
                 <Link
                     href="/"
                     className={navLinkClass(pathname, "/")}
                     aria-current={isNavLinkActive(pathname, "/") ? "page" : undefined}
                 >
-                    Sản phẩm
+                    {t("products")}
                 </Link>
 
                 <Link
@@ -195,7 +206,7 @@ export function Header() {
                     className={navLinkClass(pathname, "/face-analysis")}
                     aria-current={isNavLinkActive(pathname, "/face-analysis") ? "page" : undefined}
                 >
-                    Phân tích khuôn mặt
+                    {t("faceAnalysis")}
                 </Link>
 
                 <Link
@@ -203,7 +214,7 @@ export function Header() {
                     className={navLinkClass(pathname, "/try-on")}
                     aria-current={isNavLinkActive(pathname, "/try-on") ? "page" : undefined}
                 >
-                    Thử Kính
+                    {t("tryOn")}
                 </Link>
 
                 {authenticated && (
@@ -215,12 +226,14 @@ export function Header() {
                         className={navLinkClass(pathname, "/admin")}
                         aria-current={isNavLinkActive(pathname, "/admin") ? "page" : undefined}
                     >
-                        Quản trị
+                        {t("admin")}
                     </Link>
                 )}
             </nav>
 
             <div className="flex items-center justify-self-end gap-3 max-[900px]:col-start-2 max-[900px]:row-start-1">
+                <LanguageSwitcher />
+
                 {authenticated ? (
                     <div
                         className="relative"
@@ -260,7 +273,7 @@ export function Header() {
                                     "text-[0.87rem] font-[650] text-text max-sm:hidden",
                                 )}
                             >
-                {displayName ?? "Tài khoản"}
+                {displayName ?? t("account")}
               </span>
 
                             <svg
@@ -300,7 +313,7 @@ export function Header() {
                   <span className={ACCOUNT_MENU_ICON_CLASS}>
                     👤
                   </span>
-                                    Thông tin cá nhân
+                                    {t("profile")}
                                 </Link>
 
                                 <Link
@@ -312,7 +325,7 @@ export function Header() {
                   <span className={ACCOUNT_MENU_ICON_CLASS}>
                     📦
                   </span>
-                                    Đơn hàng của tôi
+                                    {t("myOrders")}
                                 </Link>
 
                                 <Link
@@ -324,7 +337,7 @@ export function Header() {
                   <span className={ACCOUNT_MENU_ICON_CLASS}>
                     🔒
                   </span>
-                                    Đổi mật khẩu
+                                    {t("changePassword")}
                                 </Link>
 
                                 <div className="mx-1 my-[0.35rem] h-px bg-border" />
@@ -338,7 +351,7 @@ export function Header() {
                   <span className={ACCOUNT_MENU_ICON_CLASS}>
                     ↪
                   </span>
-                                    Đăng xuất
+                                    {t("logout")}
                                 </button>
                             </div>
                         )}
@@ -352,7 +365,7 @@ export function Header() {
                                 "text-text-secondary after:scale-x-0 max-sm:hidden",
                             )}
                         >
-                            Đăng nhập
+                            {t("login")}
                         </Link>
 
                         <Link
@@ -366,7 +379,7 @@ export function Header() {
                                 "max-sm:min-h-[38px] max-sm:px-[0.85rem] max-sm:text-[0.82rem]",
                             )}
                         >
-                            Đăng ký
+                            {t("register")}
                         </Link>
                     </div>
                 )}
@@ -378,7 +391,7 @@ export function Header() {
                         "rounded-full border border-border bg-surface p-0 text-text opacity-72",
                         "max-sm:hidden",
                     )}
-                    aria-label="Giỏ hàng"
+                    aria-label={t("cart")}
                 >
                     <svg
                         width="18"

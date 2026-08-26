@@ -2,10 +2,11 @@
 
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { useRecommendations } from "@/hooks/useRecommendations";
-import { formatFaceShapeVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import type { FaceShapeTag } from "@/types/product";
 import { RecommendationGrid } from "./RecommendationGrid";
 
@@ -21,9 +22,11 @@ function isFaceShapeTag(value: string | null): value is FaceShapeTag {
 }
 
 // Reads the face shape to recommend for from a URL query param (?faceShape=OVAL), set by the
-// "Xem gọng kính được gợi ý" link on FaceAnalysisPage — shareable/bookmarkable like
+// "see recommended frames" link on FaceAnalysisPage — shareable/bookmarkable like
 // ProductListPage's filter params.
 export function RecommendationsPage() {
+  const t = useTranslations("recommendations");
+  const labels = useLabels();
   const searchParams = useSearchParams();
   const faceShapeParam = searchParams.get("faceShape");
   const { items, isLoading, error, recommend } = useRecommendations();
@@ -39,9 +42,9 @@ export function RecommendationsPage() {
     return (
       <section aria-labelledby="recommendations-heading" className={PAGE_CLASS}>
         <h1 id="recommendations-heading" className={TITLE_CLASS}>
-          Gọng kính được gợi ý
+          {t("title")}
         </h1>
-        <ErrorState message="Không xác định được dáng khuôn mặt. Vui lòng phân tích khuôn mặt trước." />
+        <ErrorState message={t("missingFaceShape")} />
       </section>
     );
   }
@@ -49,19 +52,19 @@ export function RecommendationsPage() {
   return (
     <section aria-labelledby="recommendations-heading" className={PAGE_CLASS}>
       <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.1em] text-text-muted uppercase">
-        Gợi ý dành cho bạn
+        {t("eyebrow")}
       </p>
       <h1 id="recommendations-heading" className={TITLE_CLASS}>
-        Gọng kính phù hợp với dáng mặt {formatFaceShapeVi(faceShapeParam)}
+        {t("titleForFaceShape", { faceShape: labels.faceShape(faceShapeParam) })}
       </h1>
       <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
-        Danh sách gọng kính được xếp hạng theo mức độ phù hợp với dáng khuôn mặt của bạn.
+        {t("description")}
       </p>
 
-      {isLoading && <LoadingState label="Đang tải gọng kính được gợi ý..." />}
+      {isLoading && <LoadingState label={t("loading")} />}
       {!isLoading && error && <ErrorState message={error} />}
       {!isLoading && !error && items.length === 0 && (
-        <p className="my-[1em] text-text-muted">Chưa có gọng kính nào phù hợp với dáng mặt này.</p>
+        <p className="my-[1em] text-text-muted">{t("empty")}</p>
       )}
       {!isLoading && !error && items.length > 0 && <RecommendationGrid products={items} />}
     </section>

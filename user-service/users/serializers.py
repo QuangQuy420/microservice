@@ -1,14 +1,15 @@
 """Request validation serializers.
 
-Constraints follow the spec's validation rules. Field-level
-messages are Vietnamese; the envelope message for any validation failure is
-always "Dữ liệu đầu vào không hợp lệ" with data = {"<field>": "<first msg>"}.
+Constraints follow the spec's validation rules. Field-level messages are
+English (clients translate by error code); any validation failure becomes a
+422 VALIDATION_ERROR with details = {"<field>": ["<message>", ...]}.
 """
 import re
 from datetime import date
 
 from rest_framework import serializers
 
+from .models import SUPPORTED_LANGUAGES
 from .normalize import collapse_whitespace
 
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).+$")
@@ -20,12 +21,13 @@ PHONE_PATTERN = re.compile(r"^0\d{9}$")
 
 def _messages(label: str) -> dict:
     return {
-        "required": f"{label} là bắt buộc",
-        "null": f"{label} là bắt buộc",
-        "blank": f"{label} không được để trống",
-        "invalid": f"{label} không hợp lệ",
-        "min_length": f"{label} quá ngắn",
-        "max_length": f"{label} quá dài",
+        "required": f"{label} is required",
+        "null": f"{label} is required",
+        "blank": f"{label} must not be blank",
+        "invalid": f"{label} is invalid",
+        "invalid_choice": f"{label} is not supported",
+        "min_length": f"{label} is too short",
+        "max_length": f"{label} is too long",
     }
 
 
@@ -38,16 +40,16 @@ class RegisterSerializer(serializers.Serializer):
         min_length=8,
         max_length=24,
         trim_whitespace=False,
-        error_messages=_messages("Mật khẩu"),
+        error_messages=_messages("Password"),
     )
     fullName = serializers.CharField(
-        min_length=2, max_length=50, error_messages=_messages("Họ tên")
+        min_length=2, max_length=50, error_messages=_messages("Full name")
     )
     phone = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True,
-        error_messages=_messages("Số điện thoại"),
+        error_messages=_messages("Phone number"),
     )
 
     def validate_email(self, value: str) -> str:
@@ -57,20 +59,20 @@ class RegisterSerializer(serializers.Serializer):
         value = value.strip().lower()
         if not USERNAME_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Username chỉ được chứa chữ cái, số và dấu gạch dưới"
+                "Username may only contain letters, digits and underscores"
             )
         return value
 
     def validate_password(self, value: str) -> str:
         if not PASSWORD_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Mật khẩu phải chứa ít nhất một chữ cái và một chữ số"
+                "Password must contain at least one letter and one digit"
             )
         return value
 
     def validate_fullName(self, value: str) -> str:
         if not FULL_NAME_PATTERN.fullmatch(value):
-            raise serializers.ValidationError("Họ tên không hợp lệ")
+            raise serializers.ValidationError("Full name is invalid")
         return collapse_whitespace(value)
 
     def validate_phone(self, value):
@@ -79,17 +81,17 @@ class RegisterSerializer(serializers.Serializer):
         value = value.strip()
         if value and not PHONE_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0"
+                "Phone number must be 10 digits starting with 0"
             )
         return value
 
 
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField(
-        max_length=50, error_messages=_messages("Email hoặc username")
+        max_length=50, error_messages=_messages("Email or username")
     )
     password = serializers.CharField(
-        max_length=24, trim_whitespace=False, error_messages=_messages("Mật khẩu")
+        max_length=24, trim_whitespace=False, error_messages=_messages("Password")
     )
 
 
@@ -106,13 +108,13 @@ class ResetPasswordSerializer(serializers.Serializer):
         min_length=8,
         max_length=24,
         trim_whitespace=False,
-        error_messages=_messages("Mật khẩu mới"),
+        error_messages=_messages("New password"),
     )
 
     def validate_newPassword(self, value: str) -> str:
         if not PASSWORD_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Mật khẩu mới phải chứa ít nhất một chữ cái và một chữ số"
+                "New password must contain at least one letter and one digit"
             )
         return value
 
@@ -125,33 +127,39 @@ class UpdateProfileSerializer(serializers.Serializer):
         allow_blank=True,
         allow_null=True,
         max_length=50,
-        error_messages=_messages("Họ tên"),
+        error_messages=_messages("Full name"),
     )
     phone = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True,
-        error_messages=_messages("Số điện thoại"),
+        error_messages=_messages("Phone number"),
     )
     avatarUrl = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True,
         max_length=500,
-        error_messages=_messages("Ảnh đại diện"),
+        error_messages=_messages("Avatar url"),
     )
     address = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True,
         max_length=255,
-        error_messages=_messages("Địa chỉ"),
+        error_messages=_messages("Address"),
     )
     dateOfBirth = serializers.DateField(
         required=False,
         allow_null=True,
         input_formats=["%Y-%m-%d"],
-        error_messages=_messages("Ngày sinh"),
+        error_messages=_messages("Date of birth"),
+    )
+    preferredLanguage = serializers.ChoiceField(
+        required=False,
+        allow_null=True,
+        choices=SUPPORTED_LANGUAGES,
+        error_messages=_messages("Preferred language"),
     )
 
     def validate_fullName(self, value):
@@ -161,9 +169,9 @@ class UpdateProfileSerializer(serializers.Serializer):
         if not normalized:
             return ""  # blank -> ignored by the view
         if len(normalized) < 2:
-            raise serializers.ValidationError("Họ tên quá ngắn")
+            raise serializers.ValidationError("Full name is too short")
         if not FULL_NAME_PATTERN.fullmatch(normalized):
-            raise serializers.ValidationError("Họ tên không hợp lệ")
+            raise serializers.ValidationError("Full name is invalid")
         return normalized
 
     def validate_phone(self, value):
@@ -172,13 +180,13 @@ class UpdateProfileSerializer(serializers.Serializer):
         value = value.strip()
         if value and not PHONE_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0"
+                "Phone number must be 10 digits starting with 0"
             )
         return value
 
     def validate_dateOfBirth(self, value):
         if value is not None and value >= date.today():
-            raise serializers.ValidationError("Ngày sinh phải là một ngày trong quá khứ")
+            raise serializers.ValidationError("Date of birth must be in the past")
         return value
 
 
@@ -186,33 +194,33 @@ class ChangePasswordSerializer(serializers.Serializer):
     currentPassword = serializers.CharField(
         max_length=24,
         trim_whitespace=False,
-        error_messages=_messages("Mật khẩu hiện tại"),
+        error_messages=_messages("Current password"),
     )
     newPassword = serializers.CharField(
         min_length=8,
         max_length=24,
         trim_whitespace=False,
-        error_messages=_messages("Mật khẩu mới"),
+        error_messages=_messages("New password"),
     )
 
     def validate_newPassword(self, value: str) -> str:
         if not PASSWORD_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Mật khẩu mới phải chứa ít nhất một chữ cái và một chữ số"
+                "New password must contain at least one letter and one digit"
             )
         return value
 
 
 class AddressSerializer(serializers.Serializer):
     receiverName = serializers.CharField(
-        min_length=2, max_length=100, error_messages=_messages("Tên người nhận")
+        min_length=2, max_length=100, error_messages=_messages("Receiver name")
     )
     receiverPhone = serializers.CharField(
-        error_messages=_messages("Số điện thoại người nhận")
+        error_messages=_messages("Receiver phone number")
     )
-    address = serializers.CharField(max_length=255, error_messages=_messages("Địa chỉ"))
+    address = serializers.CharField(max_length=255, error_messages=_messages("Address"))
     isDefault = serializers.BooleanField(
-        required=False, default=False, error_messages=_messages("Địa chỉ mặc định")
+        required=False, default=False, error_messages=_messages("Default address")
     )
 
     def validate_receiverName(self, value: str) -> str:
@@ -222,7 +230,7 @@ class AddressSerializer(serializers.Serializer):
         value = value.strip()
         if not PHONE_PATTERN.fullmatch(value):
             raise serializers.ValidationError(
-                "Số điện thoại người nhận phải gồm 10 chữ số và bắt đầu bằng 0"
+                "Receiver phone number must be 10 digits starting with 0"
             )
         return value
 
@@ -232,22 +240,22 @@ class AddressSerializer(serializers.Serializer):
 
 class RoleUpsertSerializer(serializers.Serializer):
     name = serializers.CharField(
-        min_length=2, max_length=50, error_messages=_messages("Tên vai trò")
+        min_length=2, max_length=50, error_messages=_messages("Role name")
     )
     description = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True,
         max_length=255,
-        error_messages=_messages("Mô tả"),
+        error_messages=_messages("Description"),
     )
     permissionIds = serializers.ListField(
-        child=serializers.UUIDField(error_messages=_messages("Id quyền")),
+        child=serializers.UUIDField(error_messages=_messages("Permission id")),
         allow_empty=True,
         error_messages={
-            "required": "Danh sách quyền là bắt buộc",
-            "null": "Danh sách quyền là bắt buộc",
-            "not_a_list": "Danh sách quyền không hợp lệ",
+            "required": "Permission list is required",
+            "null": "Permission list is required",
+            "not_a_list": "Permission list is invalid",
         },
     )
 
@@ -256,4 +264,4 @@ class RoleUpsertSerializer(serializers.Serializer):
 
 
 class AssignRoleSerializer(serializers.Serializer):
-    roleId = serializers.UUIDField(error_messages=_messages("Id vai trò"))
+    roleId = serializers.UUIDField(error_messages=_messages("Role id"))

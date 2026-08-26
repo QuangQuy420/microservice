@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { AddressBook } from "@/components/account/AddressBook";
 import { useAddresses } from "@/hooks/useAddresses";
 import {
@@ -13,7 +14,9 @@ import {
     removeAccessToken,
 } from "@/lib/auth/session";
 import type { UserProfile } from "@/types/user";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiErrorDetails, useApiError } from "@/lib/api";
+import { LOCALES, isLocale, type Locale } from "@/i18n/config";
+import { saveLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/cn";
 
 // Ported from the old `.profile-page` block. The page shell repeats the bare `main { ... }` rule
@@ -54,7 +57,26 @@ const SUBMIT_CLASS =
     "min-h-[46px] cursor-pointer rounded-[10px] border-0 bg-text px-5 py-3 font-bold text-surface " +
     "max-[700px]:w-full";
 
+const FIELD_ERROR_CLASS = "text-[0.78rem] font-normal text-[#a92828]";
+
+// Each language names itself (Intl.DisplayNames in its own locale) instead of coming from the
+// message files, so a locale added to LOCALES shows up here with no new translation key.
+function localeLabel(locale: Locale): string {
+    try {
+        const name = new Intl.DisplayNames([locale], { type: "language" }).of(locale);
+        if (name) return name.charAt(0).toUpperCase() + name.slice(1);
+    } catch {
+        // Intl.DisplayNames unavailable for this locale — fall through to the raw code.
+    }
+    return locale.toUpperCase();
+}
+
 export default function ProfilePage() {
+    const t = useTranslations("profile");
+    const tCommon = useTranslations("common");
+    const translateError = useApiError();
+    const activeLocale = useLocale() as Locale;
+
     const router = useRouter();
     const {
         addresses,
@@ -69,12 +91,28 @@ export default function ProfilePage() {
     const [phone, setPhone] = useState("");
     const [avatarUrl, setAvatarUrl] = useState("");
     const [dateOfBirth, setDateOfBirth] = useState("");
+    // Empty until the profile carries a saved language; the select then falls back to the
+    // locale the page is currently rendered in.
+    const [preferredLanguage, setPreferredLanguage] = useState("");
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+    const selectedLanguage: Locale = isLocale(preferredLanguage)
+        ? preferredLanguage
+        : activeLocale;
+
+    function renderFieldErrors(field: string) {
+        return fieldErrors[field]?.map((detail) => (
+            <span key={detail} role="alert" className={FIELD_ERROR_CLASS}>
+                {detail}
+            </span>
+        ));
+    }
 
     useEffect(() => {
         async function loadProfile() {
@@ -86,14 +124,16 @@ export default function ProfilePage() {
             }
 
             try {
-                const response = await getMyProfile(token);
-                const user = response.data;
+                const user = await getMyProfile(token);
 
                 setProfile(user);
                 setFullName(user.fullName ?? "");
                 setPhone(user.phone ?? "");
                 setAvatarUrl(user.avatarUrl ?? "");
                 setDateOfBirth(user.dateOfBirth ?? "");
+                setPreferredLanguage(
+                    isLocale(user.preferredLanguage) ? user.preferredLanguage : "",
+                );
             } catch (err) {
                 if (err instanceof ApiError && err.status === 401) {
                     removeAccessToken();
@@ -101,18 +141,14 @@ export default function ProfilePage() {
                     return;
                 }
 
-                setError(
-                    err instanceof ApiError
-                        ? err.message
-                        : "Không thể tải thông tin người dùng.",
-                );
+                setError(translateError(err));
             } finally {
                 setLoading(false);
             }
         }
 
         void loadProfile();
-    }, [router]);
+    }, [router, translateError]);
 
     async function handleUpdateProfile(
         event: FormEvent<HTMLFormElement>,
@@ -129,23 +165,28 @@ export default function ProfilePage() {
         setSaving(true);
         setError("");
         setMessage("");
+        setFieldErrors({});
 
         try {
-            const response = await updateMyProfile(token, {
+            const updated = await updateMyProfile(token, {
                 fullName,
                 phone,
                 avatarUrl,
                 dateOfBirth: dateOfBirth || undefined,
+                preferredLanguage: selectedLanguage,
             });
 
-            setProfile(response.data);
-            setMessage("Cập nhật thông tin thành công.");
+            setProfile(updated);
+            setMessage(t("updateSuccess"));
+
+            // saveLocale writes the NEXT_LOCALE cookie and fires "locale-change"; LocaleSync turns
+            // that into a soft refresh, so the page must not reload itself here.
+            if (selectedLanguage !== activeLocale) {
+                saveLocale(selectedLanguage);
+            }
         } catch (err) {
-            setError(
-                err instanceof ApiError
-                    ? err.message
-                    : "Cập nhật thông tin thất bại.",
-            );
+            setError(translateError(err));
+            setFieldErrors(apiErrorDetails(err));
         } finally {
             setSaving(false);
         }
@@ -154,7 +195,7 @@ export default function ProfilePage() {
     if (loading) {
         return (
             <main className={PAGE_CLASS}>
-                <p className="my-[1em]">Đang tải thông tin...</p>
+                <p className="my-[1em]">{tCommon("loading")}</p>
             </main>
         );
     }
@@ -162,7 +203,7 @@ export default function ProfilePage() {
     if (!profile) {
         return (
             <main className={PAGE_CLASS}>
-                <p className="my-[1em]">{error || "Không tìm thấy thông tin người dùng."}</p>
+                <p className="my-[1em]">{error || t("notFound")}</p>
             </main>
         );
     }
@@ -172,15 +213,15 @@ export default function ProfilePage() {
             <section className={cn(SECTION_CLASS, "grid grid-cols-2 items-center gap-x-5 gap-y-3 max-[700px]:items-start max-sm:grid-cols-1")}>
                 <div>
                     <p className={cn(SUMMARY_PILL_CLASS, "text-[0.75rem] font-bold tracking-[0.1em] uppercase")}>
-                        Tài khoản của bạn
+                        {t("eyebrow")}
                     </p>
 
                     <h1 className="mb-4 font-heading text-[clamp(1.75rem,3vw,2.25rem)] font-bold text-text">
-                        Thông tin cá nhân
+                        {t("title")}
                     </h1>
 
                     <p className={cn(SUMMARY_PILL_CLASS, "leading-[1.6]")}>
-                        Quản lý thông tin liên hệ và hồ sơ cá nhân.
+                        {t("summary")}
                     </p>
                 </div>
 
@@ -200,16 +241,16 @@ export default function ProfilePage() {
             </section>
 
             <section className={SECTION_CLASS}>
-                <h2 className={HEADING_CLASS}>Thông tin tài khoản</h2>
+                <h2 className={HEADING_CLASS}>{t("accountSectionTitle")}</h2>
 
                 <div className={TWO_COL_GRID_CLASS}>
                     <div className="rounded-xl bg-[rgba(43,36,32,0.035)] p-4">
-                        <span className={DETAIL_LABEL_CLASS}>Tên đăng nhập</span>
+                        <span className={DETAIL_LABEL_CLASS}>{t("usernameLabel")}</span>
                         <strong className="block">{profile.username}</strong>
                     </div>
 
                     <div className="rounded-xl bg-[rgba(43,36,32,0.035)] p-4">
-                        <span className={DETAIL_LABEL_CLASS}>Email</span>
+                        <span className={DETAIL_LABEL_CLASS}>{t("emailLabel")}</span>
                         <strong className="block">{profile.email}</strong>
                     </div>
                 </div>
@@ -218,9 +259,9 @@ export default function ProfilePage() {
             <section className={SECTION_CLASS}>
                 <div>
                     <div>
-                        <h2 className={HEADING_CLASS}>Cập nhật hồ sơ</h2>
+                        <h2 className={HEADING_CLASS}>{t("editSectionTitle")}</h2>
                         <p className="leading-[1.6] text-text-secondary">
-                            Thay đổi thông tin cá nhân của bạn.
+                            {t("editSectionSubtitle")}
                         </p>
                     </div>
                 </div>
@@ -230,7 +271,7 @@ export default function ProfilePage() {
                     onSubmit={handleUpdateProfile}
                 >
                     <label className={LABEL_CLASS}>
-                        Họ và tên
+                        {t("fullNameLabel")}
                         <input
                             className={INPUT_CLASS}
                             type="text"
@@ -239,10 +280,11 @@ export default function ProfilePage() {
                                 setFullName(event.target.value)
                             }
                         />
+                        {renderFieldErrors("fullName")}
                     </label>
 
                     <label className={LABEL_CLASS}>
-                        Số điện thoại
+                        {t("phoneLabel")}
                         <input
                             className={INPUT_CLASS}
                             type="tel"
@@ -251,10 +293,11 @@ export default function ProfilePage() {
                                 setPhone(event.target.value)
                             }
                         />
+                        {renderFieldErrors("phone")}
                     </label>
 
                     <label className={LABEL_CLASS}>
-                        Ngày sinh
+                        {t("dateOfBirthLabel")}
                         <input
                             className={INPUT_CLASS}
                             type="date"
@@ -263,10 +306,29 @@ export default function ProfilePage() {
                                 setDateOfBirth(event.target.value)
                             }
                         />
+                        {renderFieldErrors("dateOfBirth")}
+                    </label>
+
+                    <label className={LABEL_CLASS}>
+                        {t("languageLabel")}
+                        <select
+                            className={INPUT_CLASS}
+                            value={selectedLanguage}
+                            onChange={(event) =>
+                                setPreferredLanguage(event.target.value)
+                            }
+                        >
+                            {LOCALES.map((locale) => (
+                                <option key={locale} value={locale}>
+                                    {localeLabel(locale)}
+                                </option>
+                            ))}
+                        </select>
+                        {renderFieldErrors("preferredLanguage")}
                     </label>
 
                     <label className={cn(LABEL_CLASS, FULL_WIDTH_CLASS)}>
-                        URL ảnh đại diện
+                        {t("avatarUrlLabel")}
                         <input
                             className={INPUT_CLASS}
                             type="url"
@@ -275,13 +337,14 @@ export default function ProfilePage() {
                                 setAvatarUrl(event.target.value)
                             }
                         />
+                        {renderFieldErrors("avatarUrl")}
                     </label>
 
                     <div className={FULL_WIDTH_CLASS}>
                         <button type="submit" className={SUBMIT_CLASS} disabled={saving}>
                             {saving
-                                ? "Đang lưu..."
-                                : "Lưu thay đổi"}
+                                ? tCommon("saving")
+                                : tCommon("save")}
                         </button>
                     </div>
 
@@ -300,8 +363,8 @@ export default function ProfilePage() {
             <section className={SECTION_CLASS}>
                 <div>
                     <div>
-                        <h2 className={HEADING_CLASS}>Sổ địa chỉ</h2>
-                        <p className="leading-[1.6] text-text-secondary">Quản lý các địa chỉ giao hàng đã lưu, dùng để chọn nhanh khi thanh toán.</p>
+                        <h2 className={HEADING_CLASS}>{t("addressSectionTitle")}</h2>
+                        <p className="leading-[1.6] text-text-secondary">{t("addressSectionSubtitle")}</p>
                     </div>
                 </div>
 

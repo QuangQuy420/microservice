@@ -43,43 +43,52 @@ def test_health_returns_ok() -> None:
 
 
 def test_recommend_happy_path_returns_the_service_response() -> None:
-    _override_with(_FakeRecommendationService(response=RecommendResponse(items=[])))
+    _override_with(_FakeRecommendationService(response=RecommendResponse(data=[])))
 
     response = client.post("/recommend", json={"faceShape": "OVAL"})
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == {"data": []}
 
 
 def test_recommend_rejects_an_invalid_face_shape() -> None:
-    _override_with(_FakeRecommendationService(response=RecommendResponse(items=[])))
+    _override_with(_FakeRecommendationService(response=RecommendResponse(data=[])))
 
     response = client.post("/recommend", json={"faceShape": "NOT_A_REAL_SHAPE"})
 
     assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert isinstance(error["details"]["faceShape"], list)
 
 
 def test_recommend_maps_product_service_timeout_to_504() -> None:
     _override_with(
         _FakeRecommendationService(
-            error=ProductServiceTimeoutError("product-service không phản hồi kịp thời.")
+            error=ProductServiceTimeoutError("product-service did not respond in time")
         )
     )
 
     response = client.post("/recommend", json={"faceShape": "OVAL"})
 
     assert response.status_code == 504
-    assert "không phản hồi kịp thời" in response.json()["detail"]
+    assert response.json()["error"] == {
+        "code": "UPSTREAM_TIMEOUT",
+        "message": "product-service did not respond in time",
+    }
 
 
 def test_recommend_maps_product_service_unavailable_to_503() -> None:
     _override_with(
         _FakeRecommendationService(
-            error=ProductServiceUnavailableError("Không thể kết nối tới product-service.")
+            error=ProductServiceUnavailableError("Could not connect to product-service")
         )
     )
 
     response = client.post("/recommend", json={"faceShape": "OVAL"})
 
     assert response.status_code == 503
-    assert "Không thể kết nối" in response.json()["detail"]
+    assert response.json()["error"] == {
+        "code": "UPSTREAM_UNAVAILABLE",
+        "message": "Could not connect to product-service",
+    }

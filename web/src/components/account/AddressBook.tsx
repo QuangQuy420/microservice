@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, createMyAddress, deleteMyAddress, updateMyAddress } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import {
+  apiErrorDetails,
+  createMyAddress,
+  deleteMyAddress,
+  updateMyAddress,
+  useApiError,
+} from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
 import type { Address } from "@/types/user";
@@ -56,21 +63,26 @@ interface AddressFormErrors {
   address?: string;
 }
 
-function validateAddressForm(values: AddressFormValues): AddressFormErrors {
+type AccountTranslator = ReturnType<typeof useTranslations<"account">>;
+
+function validateAddressForm(
+  values: AddressFormValues,
+  t: AccountTranslator,
+): AddressFormErrors {
   const errors: AddressFormErrors = {};
 
   if (!values.receiverName.trim()) {
-    errors.receiverName = "Tên người nhận không được để trống.";
+    errors.receiverName = t("receiverNameRequired");
   }
 
   if (!values.receiverPhone.trim()) {
-    errors.receiverPhone = "Số điện thoại không được để trống.";
+    errors.receiverPhone = t("receiverPhoneRequired");
   } else if (!PHONE_PATTERN.test(values.receiverPhone.trim())) {
-    errors.receiverPhone = "Số điện thoại không hợp lệ.";
+    errors.receiverPhone = t("receiverPhoneInvalid");
   }
 
   if (!values.address.trim()) {
-    errors.address = "Địa chỉ không được để trống.";
+    errors.address = t("addressRequired");
   }
 
   return errors;
@@ -83,17 +95,23 @@ function AddressFormFields({
   idPrefix,
   values,
   errors,
+  fieldErrors,
   onChange,
 }: {
   idPrefix: string;
   values: AddressFormValues;
   errors: AddressFormErrors;
+  // Field messages from a 422 VALIDATION_ERROR, keyed by request field name. They are English
+  // text authored by user-service, so they render as-is next to the client-side messages.
+  fieldErrors: Record<string, string[]>;
   onChange: (values: AddressFormValues) => void;
 }) {
+  const t = useTranslations("account");
+
   return (
     <>
       <label htmlFor={`${idPrefix}-receiver-name`} className={FORM_LABEL}>
-        Tên người nhận
+        {t("receiverNameLabel")}
         <input
           id={`${idPrefix}-receiver-name`}
           type="text"
@@ -103,10 +121,15 @@ function AddressFormFields({
           autoComplete="name"
         />
         {errors.receiverName && <span className="field-error">{errors.receiverName}</span>}
+        {fieldErrors.receiverName?.map((message) => (
+          <span key={message} role="alert" className="field-error">
+            {message}
+          </span>
+        ))}
       </label>
 
       <label htmlFor={`${idPrefix}-receiver-phone`} className={FORM_LABEL}>
-        Số điện thoại
+        {t("receiverPhoneLabel")}
         <input
           id={`${idPrefix}-receiver-phone`}
           type="tel"
@@ -116,10 +139,15 @@ function AddressFormFields({
           autoComplete="tel"
         />
         {errors.receiverPhone && <span className="field-error">{errors.receiverPhone}</span>}
+        {fieldErrors.receiverPhone?.map((message) => (
+          <span key={message} role="alert" className="field-error">
+            {message}
+          </span>
+        ))}
       </label>
 
       <label htmlFor={`${idPrefix}-line`} className={FORM_LABEL}>
-        Địa chỉ giao hàng
+        {t("addressLabel")}
         <input
           id={`${idPrefix}-line`}
           type="text"
@@ -129,6 +157,11 @@ function AddressFormFields({
           autoComplete="street-address"
         />
         {errors.address && <span className="field-error">{errors.address}</span>}
+        {fieldErrors.address?.map((message) => (
+          <span key={message} role="alert" className="field-error">
+            {message}
+          </span>
+        ))}
       </label>
 
       <label className="flex cursor-pointer flex-row items-center gap-2 text-[0.85rem] font-medium text-text-secondary">
@@ -138,7 +171,7 @@ function AddressFormFields({
           checked={values.isDefault}
           onChange={(event) => onChange({ ...values, isDefault: event.target.checked })}
         />
-        Đặt làm địa chỉ mặc định
+        {t("setDefault")}
       </label>
     </>
   );
@@ -168,12 +201,17 @@ export function AddressBook({
   selectedAddressId = null,
   onSelectAddress,
 }: AddressBookProps) {
+  const t = useTranslations("account");
+  const tCommon = useTranslations("common");
+  const translateError = useApiError();
+
   const isPicker = mode === "picker";
 
   const [isAddingAddress, setIsAddingAddress] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressForm, setAddressForm] = useState<AddressFormValues>(BLANK_ADDRESS_FORM);
   const [addressFormErrors, setAddressFormErrors] = useState<AddressFormErrors>({});
+  const [addressFieldErrors, setAddressFieldErrors] = useState<Record<string, string[]>>({});
   const [isSavingAddressForm, setIsSavingAddressForm] = useState(false);
   const [addressFormError, setAddressFormError] = useState<string | null>(null);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
@@ -184,6 +222,7 @@ export function AddressBook({
     setIsAddingAddress(true);
     setAddressForm(BLANK_ADDRESS_FORM);
     setAddressFormErrors({});
+    setAddressFieldErrors({});
     setAddressFormError(null);
   }
 
@@ -197,6 +236,7 @@ export function AddressBook({
       isDefault: address.isDefault,
     });
     setAddressFormErrors({});
+    setAddressFieldErrors({});
     setAddressFormError(null);
   }
 
@@ -204,17 +244,18 @@ export function AddressBook({
     setIsAddingAddress(false);
     setEditingAddressId(null);
     setAddressFormErrors({});
+    setAddressFieldErrors({});
     setAddressFormError(null);
   }
 
   async function handleSaveAddressForm() {
-    const errors = validateAddressForm(addressForm);
+    const errors = validateAddressForm(addressForm, t);
     setAddressFormErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     const token = getAccessToken();
     if (!token) {
-      setAddressFormError("Bạn cần đăng nhập để lưu địa chỉ.");
+      setAddressFormError(t("loginToSave"));
       return;
     }
 
@@ -227,28 +268,30 @@ export function AddressBook({
 
     setIsSavingAddressForm(true);
     setAddressFormError(null);
+    setAddressFieldErrors({});
     try {
-      const response = editingAddressId
+      const saved = editingAddressId
         ? await updateMyAddress(token, editingAddressId, payload)
         : await createMyAddress(token, payload);
       await onAddressesChange();
-      onSelectAddress?.(response.data);
+      onSelectAddress?.(saved);
       closeAddressForm();
     } catch (err) {
-      setAddressFormError(err instanceof ApiError ? err.message : "Không thể lưu địa chỉ.");
+      setAddressFormError(translateError(err));
+      setAddressFieldErrors(apiErrorDetails(err));
     } finally {
       setIsSavingAddressForm(false);
     }
   }
 
   async function handleDeleteAddress(address: Address) {
-    if (!window.confirm(`Xóa địa chỉ của ${address.receiverName}? Hành động này không thể hoàn tác.`)) {
+    if (!window.confirm(t("deleteConfirm", { name: address.receiverName }))) {
       return;
     }
 
     const token = getAccessToken();
     if (!token) {
-      setDeleteError("Bạn cần đăng nhập để xóa địa chỉ.");
+      setDeleteError(t("loginToDelete"));
       return;
     }
 
@@ -259,14 +302,14 @@ export function AddressBook({
       await onAddressesChange();
       if (editingAddressId === address.id) closeAddressForm();
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Không thể xóa địa chỉ.");
+      setDeleteError(translateError(err));
     } finally {
       setDeletingAddressId(null);
     }
   }
 
   if (isLoading) {
-    return <p className="text-[0.88rem] text-text-muted">Đang tải địa chỉ...</p>;
+    return <p className="text-[0.88rem] text-text-muted">{t("loadingAddresses")}</p>;
   }
 
   const isAddressFormOpen = isAddingAddress || editingAddressId !== null;
@@ -285,7 +328,7 @@ export function AddressBook({
         <div
           className="flex flex-col gap-[0.6rem]"
           role={isPicker ? "radiogroup" : undefined}
-          aria-label={isPicker ? "Chọn địa chỉ giao hàng" : undefined}
+          aria-label={isPicker ? t("selectShippingAddress") : undefined}
         >
           {addresses.map((address) =>
             editingAddressId === address.id ? (
@@ -294,6 +337,7 @@ export function AddressBook({
                   idPrefix={`edit-address-${address.id}`}
                   values={addressForm}
                   errors={addressFormErrors}
+                  fieldErrors={addressFieldErrors}
                   onChange={setAddressForm}
                 />
 
@@ -310,7 +354,7 @@ export function AddressBook({
                     onClick={handleSaveAddressForm}
                     disabled={isSavingAddressForm}
                   >
-                    {isSavingAddressForm ? "Đang lưu..." : "Lưu"}
+                    {isSavingAddressForm ? tCommon("saving") : t("save")}
                   </button>
                   <button
                     type="button"
@@ -318,7 +362,7 @@ export function AddressBook({
                     onClick={closeAddressForm}
                     disabled={isSavingAddressForm}
                   >
-                    Hủy
+                    {tCommon("cancel")}
                   </button>
                 </div>
               </div>
@@ -345,7 +389,7 @@ export function AddressBook({
                 <span className={OPTION_BODY}>
                   <span className={OPTION_NAME}>
                     {address.receiverName} · {address.receiverPhone}
-                    {address.isDefault && <span className={OPTION_BADGE}>Mặc định</span>}
+                    {address.isDefault && <span className={OPTION_BADGE}>{t("defaultBadge")}</span>}
                   </span>
                   <span className="text-[0.82rem] text-text-muted">{address.address}</span>
                 </span>
@@ -358,7 +402,7 @@ export function AddressBook({
                     openEditForm(address);
                   }}
                 >
-                  Sửa
+                  {tCommon("edit")}
                 </button>
               </label>
             ) : (
@@ -366,13 +410,13 @@ export function AddressBook({
                 <span className={OPTION_BODY}>
                   <span className={OPTION_NAME}>
                     {address.receiverName} · {address.receiverPhone}
-                    {address.isDefault && <span className={OPTION_BADGE}>Mặc định</span>}
+                    {address.isDefault && <span className={OPTION_BADGE}>{t("defaultBadge")}</span>}
                   </span>
                   <span className="text-[0.82rem] text-text-muted">{address.address}</span>
                 </span>
                 <div className="flex shrink-0 self-center gap-2">
                   <button type="button" className={EDIT_BTN_NEUTRAL} onClick={() => openEditForm(address)}>
-                    Sửa
+                    {tCommon("edit")}
                   </button>
                   <button
                     type="button"
@@ -380,7 +424,7 @@ export function AddressBook({
                     onClick={() => handleDeleteAddress(address)}
                     disabled={deletingAddressId === address.id}
                   >
-                    {deletingAddressId === address.id ? "Đang xóa..." : "Xóa"}
+                    {deletingAddressId === address.id ? t("deleting") : tCommon("delete")}
                   </button>
                 </div>
               </div>
@@ -397,7 +441,7 @@ export function AddressBook({
                 onChange={openAddForm}
               />
               <span className={OPTION_BODY}>
-                <span className={OPTION_NAME}>Thêm địa chỉ mới</span>
+                <span className={OPTION_NAME}>{t("addNewAddress")}</span>
               </span>
             </label>
           )}
@@ -410,7 +454,7 @@ export function AddressBook({
           className="btn btn-outline btn-small self-start"
           onClick={openAddForm}
         >
-          Thêm địa chỉ mới
+          {t("addNewAddress")}
         </button>
       )}
 
@@ -420,6 +464,7 @@ export function AddressBook({
             idPrefix="new-address"
             values={addressForm}
             errors={addressFormErrors}
+            fieldErrors={addressFieldErrors}
             onChange={setAddressForm}
           />
 
@@ -436,7 +481,7 @@ export function AddressBook({
               onClick={handleSaveAddressForm}
               disabled={isSavingAddressForm}
             >
-              {isSavingAddressForm ? "Đang lưu..." : "Lưu địa chỉ"}
+              {isSavingAddressForm ? tCommon("saving") : t("saveAddress")}
             </button>
             {addresses.length > 0 && (
               <button
@@ -445,7 +490,7 @@ export function AddressBook({
                 onClick={closeAddressForm}
                 disabled={isSavingAddressForm}
               >
-                Hủy
+                {tCommon("cancel")}
               </button>
             )}
           </div>

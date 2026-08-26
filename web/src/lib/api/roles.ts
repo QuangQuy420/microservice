@@ -1,4 +1,3 @@
-import type { ApiResponse } from "@/types/auth";
 import type {
     CreateRoleRequest,
     Permission,
@@ -13,8 +12,8 @@ function authHeaders(token: string): HeadersInit {
     };
 }
 
-export function listRoles(token: string): Promise<ApiResponse<Role[]>> {
-    return apiFetch<ApiResponse<Role[]>>("/roles", {
+export function listRoles(token: string): Promise<Role[]> {
+    return apiFetch<Role[]>("/roles", {
         method: "GET",
         headers: authHeaders(token),
     });
@@ -23,8 +22,8 @@ export function listRoles(token: string): Promise<ApiResponse<Role[]>> {
 export function createRole(
     token: string,
     payload: CreateRoleRequest,
-): Promise<ApiResponse<Role>> {
-    return apiFetch<ApiResponse<Role>>("/roles", {
+): Promise<Role> {
+    return apiFetch<Role>("/roles", {
         method: "POST",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
@@ -35,25 +34,23 @@ export function updateRole(
     token: string,
     id: string,
     payload: UpdateRoleRequest,
-): Promise<ApiResponse<Role>> {
-    return apiFetch<ApiResponse<Role>>(`/roles/${encodeURIComponent(id)}`, {
+): Promise<Role> {
+    return apiFetch<Role>(`/roles/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: authHeaders(token),
         body: JSON.stringify(payload),
     });
 }
 
-export function deleteRole(token: string, id: string): Promise<ApiResponse<null>> {
-    return apiFetch<ApiResponse<null>>(`/roles/${encodeURIComponent(id)}`, {
+export function deleteRole(token: string, id: string): Promise<null> {
+    return apiFetch<null>(`/roles/${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: authHeaders(token),
     });
 }
 
-export function listPermissions(
-    token: string,
-): Promise<ApiResponse<Permission[]>> {
-    return apiFetch<ApiResponse<Permission[]>>("/permissions", {
+export function listPermissions(token: string): Promise<Permission[]> {
+    return apiFetch<Permission[]>("/permissions", {
         method: "GET",
         headers: authHeaders(token),
     });

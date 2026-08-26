@@ -25,7 +25,6 @@ def list_addresses(client, token):
 def test_create_address_returns_200_not_201(client, customer):
     response = create_address(client, customer["token"])
     assert response.status_code == 200  # original quirk: POST -> 200
-    assert response.data["message"] == "Thêm địa chỉ thành công"
     data = response.data["data"]
     assert set(data.keys()) == {
         "id",
@@ -66,7 +65,6 @@ def test_list_ordering_default_first_then_newest(client, customer):
     a2 = create_address(client, customer["token"], address="A2")
     a3 = create_address(client, customer["token"], address="A3")
     listing = list_addresses(client, customer["token"])
-    assert listing.data["message"] == "Lấy danh sách địa chỉ thành công"
     ids = [a["id"] for a in listing.data["data"]]
     # a1 is default (first created); then newest first
     assert ids == [
@@ -90,7 +88,6 @@ def test_edit_cannot_demote_default(client, customer):
         **bearer(customer["token"]),
     )
     assert response.status_code == 200
-    assert response.data["message"] == "Cập nhật địa chỉ thành công"
     assert response.data["data"]["isDefault"] is True  # NOT demoted
 
 
@@ -123,7 +120,7 @@ def test_delete_default_promotes_next(client, customer):
         **bearer(customer["token"]),
     )
     assert response.status_code == 200
-    assert response.data["message"] == "Xóa địa chỉ thành công"
+    assert response.data == {"data": None}
 
     listing = list_addresses(client, customer["token"]).data["data"]
     assert len(listing) == 2
@@ -152,7 +149,7 @@ def test_address_not_found_for_unknown_and_bad_ids(client, customer):
             f"/api/v1/addresses/{bad_id}", **bearer(customer["token"])
         )
         assert response.status_code == 404
-        assert response.data["message"] == "Không tìm thấy địa chỉ"
+        assert response.data["error"]["code"] == "ADDRESS_NOT_FOUND"
 
 
 def test_address_of_other_user_is_404(client, customer):
@@ -166,14 +163,14 @@ def test_address_of_other_user_is_404(client, customer):
         f"/api/v1/addresses/{address_id}", **bearer(other_token)
     )
     assert response.status_code == 404
-    assert response.data["message"] == "Không tìm thấy địa chỉ"
+    assert response.data["error"]["code"] == "ADDRESS_NOT_FOUND"
 
 
 def test_address_validation_and_normalization(client, customer):
     response = create_address(client, customer["token"], receiverPhone="123")
-    assert response.status_code == 400
-    assert response.data["message"] == "Dữ liệu đầu vào không hợp lệ"
-    assert "receiverPhone" in response.data["data"]
+    assert response.status_code == 422
+    assert response.data["error"]["code"] == "VALIDATION_ERROR"
+    assert "receiverPhone" in response.data["error"]["details"]
 
     ok = create_address(
         client,

@@ -1,4 +1,4 @@
-// Admin-only saga-log calls (T29) — read-only "nhật ký đơn hàng" for the checkout saga
+// Admin-only saga-log calls (T29) — read-only "order processing log" for the checkout saga
 // (reconciliation resends, dead-letters, saga milestones — see plan FR14-FR16). Copies the
 // authHeaders/apiFetch pattern from admin-orders.ts. Calls api-gateway's
 // AdminSagaLogsController (api-gateway/src/routes/saga-logs.controller.ts,

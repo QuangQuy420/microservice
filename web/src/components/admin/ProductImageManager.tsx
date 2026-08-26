@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
-  ApiError,
   deleteProductImage,
   setProductImageThumbnail,
   uploadProductImage,
+  useApiError,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
@@ -26,10 +27,10 @@ interface ProductImageManagerProps {
 }
 
 // Multi-image manager (T23): replaces the old 4-fixed-slot ImageUploadSlot. Renders the current
-// images for one group (append-only, never replaced), each with its own "Đặt làm ảnh đại diện"/
-// "Xoá" actions, plus a multi-file upload input that uploads sequentially and stops client-side
-// once `maxCount` is reached. Disabled until `productId` exists — uploads attach to an existing
-// product/variant, a brand-new one has no id yet.
+// images for one group (append-only, never replaced), each with its own "set as thumbnail"/
+// "delete" actions, plus a multi-file upload input that uploads sequentially and stops
+// client-side once `maxCount` is reached. Disabled until `productId` exists — uploads attach to
+// an existing product/variant, a brand-new one has no id yet.
 export function ProductImageManager({
   productId,
   variantId,
@@ -37,6 +38,9 @@ export function ProductImageManager({
   maxCount,
   onChange,
 }: ProductImageManagerProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
+  const translateError = useApiError();
   const [imageList, setImageList] = useState<ProductImage[]>(images);
   const [isUploading, setIsUploading] = useState(false);
   const [busyImageId, setBusyImageId] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export function ProductImageManager({
 
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("images.sessionExpired"));
       return;
     }
 
@@ -75,10 +79,10 @@ export function ProductImageManager({
         });
       }
       if (blocked) {
-        setError(`Đã đạt số lượng ảnh tối đa (${maxCount} ảnh) cho mục này, không thể tải thêm.`);
+        setError(t("images.limitReachedUpload", { max: maxCount }));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Tải ảnh lên thất bại.");
+      setError(translateError(err));
     } finally {
       setIsUploading(false);
     }
@@ -88,7 +92,7 @@ export function ProductImageManager({
     if (!productId) return;
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("images.sessionExpired"));
       return;
     }
 
@@ -102,7 +106,7 @@ export function ProductImageManager({
         return next;
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể đặt ảnh đại diện.");
+      setError(translateError(err));
     } finally {
       setBusyImageId(null);
     }
@@ -112,7 +116,7 @@ export function ProductImageManager({
     if (!productId) return;
     const token = getAccessToken();
     if (!token) {
-      setError("Vui lòng đăng nhập lại.");
+      setError(t("images.sessionExpired"));
       return;
     }
 
@@ -126,7 +130,7 @@ export function ProductImageManager({
         return next;
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Không thể xoá ảnh.");
+      setError(translateError(err));
     } finally {
       setBusyImageId(null);
     }
@@ -143,13 +147,13 @@ export function ProductImageManager({
             >
               <ImageWithFallback
                 src={image.imageUrl}
-                alt="Ảnh sản phẩm"
+                alt={t("images.imageAlt")}
                 className={IMAGE}
                 placeholderClassName={IMAGE}
               />
               {image.isThumbnail && (
                 <span className="absolute top-[0.4rem] left-[0.4rem] rounded-full bg-text px-[0.45rem] py-[0.15rem] text-[0.7rem] font-semibold text-surface">
-                  Ảnh đại diện
+                  {t("images.thumbnailBadge")}
                 </span>
               )}
               <div className="flex flex-col gap-[0.35rem] p-2">
@@ -159,7 +163,7 @@ export function ProductImageManager({
                   onClick={() => handleSetThumbnail(image.id)}
                   disabled={image.isThumbnail || busyImageId === image.id}
                 >
-                  Đặt làm ảnh đại diện
+                  {t("images.setThumbnail")}
                 </button>
                 <button
                   type="button"
@@ -167,7 +171,7 @@ export function ProductImageManager({
                   onClick={() => handleDelete(image.id)}
                   disabled={busyImageId === image.id}
                 >
-                  Xoá
+                  {tCommon("delete")}
                 </button>
               </div>
             </li>
@@ -181,7 +185,7 @@ export function ProductImageManager({
           isUploadDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         )}
       >
-        <span>{isUploading ? "Đang tải lên…" : "Tải ảnh lên"}</span>
+        <span>{isUploading ? t("images.uploading") : t("images.upload")}</span>
         <input
           type="file"
           className={cn(
@@ -192,11 +196,11 @@ export function ProductImageManager({
           multiple
           disabled={isUploadDisabled}
           onChange={handleFileChange}
-          aria-label="Tải ảnh lên"
+          aria-label={t("images.upload")}
         />
       </label>
       {isFull && (
-        <p className="text-xs text-text-muted">Đã đạt số lượng ảnh tối đa ({maxCount} ảnh).</p>
+        <p className="text-xs text-text-muted">{t("images.limitReached", { max: maxCount })}</p>
       )}
       {error && <p className="field-error my-[1em]">{error}</p>}
     </div>

@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { ApiError, getSagaLogsForDay } from "@/lib/api";
+import { getSagaLogsForDay, useApiError } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
 import { formatIsoDateVi } from "@/lib/format/date";
-import { formatSagaLogLevelVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import type { OrderLogSummary } from "@/types/saga-log";
 
 const ROW =
@@ -22,10 +23,14 @@ interface SagaLogOrdersPageProps {
   date: string;
 }
 
-// Nhật ký xử lý đơn hàng — order list for one day (T30, FR18, AC11/AC12). One row per order with
+// Order processing log — order list for one day (T30, FR18, AC11/AC12). One row per order with
 // saga-log activity on `date`, showing how many entries it has and the worst (most severe)
 // level among them, so an operator can tell at a glance which orders need a closer look.
 export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
+  const t = useTranslations("admin");
+  const labels = useLabels();
+  const translateError = useApiError();
+
   const [orders, setOrders] = useState<OrderLogSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +42,7 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
       const token = getAccessToken();
       if (!token) {
         if (!cancelled) {
-          setError("Vui lòng đăng nhập lại.");
+          setError(t("sagaLogs.sessionExpired"));
           setIsLoading(false);
         }
         return;
@@ -50,9 +55,7 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
         if (!cancelled) setOrders(result);
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err instanceof ApiError ? err.message : "Không thể tải danh sách đơn hàng trong ngày.",
-          );
+          setError(translateError(err));
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -64,12 +67,12 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [date]);
+  }, [date, t, translateError]);
 
   return (
     <>
       <header className="flex items-center justify-between gap-4 border-b border-border bg-surface px-7 py-5">
-        <div className="font-heading text-[1.35rem] font-semibold">Nhật ký xử lý đơn hàng — ngày {formatIsoDateVi(date)}</div>
+        <div className="font-heading text-[1.35rem] font-semibold">{t("sagaLogs.orders.title", { date: formatIsoDateVi(date) })}</div>
         <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-text text-[0.8rem] font-semibold text-bg">
           AD
         </div>
@@ -83,19 +86,19 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
-          Về danh sách ngày
+          {t("sagaLogs.orders.backToDays")}
         </Link>
 
-        {isLoading && <LoadingState label="Đang tải danh sách đơn hàng..." />}
+        {isLoading && <LoadingState label={t("sagaLogs.orders.loading")} />}
         {!isLoading && error && <ErrorState message={error} />}
 
         {!isLoading && !error && (
           <div className="overflow-hidden rounded-lg border border-border bg-surface">
             <div className={cn(ROW, ROW_HEAD)}>
-              <span>Mã đơn hàng</span>
-              <span>Số bản ghi</span>
-              <span>Mức cao nhất</span>
-              <span>Hoạt động gần nhất</span>
+              <span>{t("sagaLogs.orders.columnOrderCode")}</span>
+              <span>{t("sagaLogs.orders.columnEntryCount")}</span>
+              <span>{t("sagaLogs.orders.columnWorstLevel")}</span>
+              <span>{t("sagaLogs.orders.columnLastActivity")}</span>
             </div>
             {orders.map((order) => {
               const isWarning = order.worstLevel === "WARN";
@@ -116,7 +119,7 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
                           : "bg-[rgba(74,90,82,0.14)] text-[#4a5a52]",
                       )}
                     >
-                      {formatSagaLogLevelVi(order.worstLevel)}
+                      {labels.sagaLevel(order.worstLevel)}
                     </span>
                   </span>
                   <span>{new Date(order.lastOccurredAt).toLocaleString("vi-VN")}</span>
@@ -125,7 +128,7 @@ export function SagaLogOrdersPage({ date }: SagaLogOrdersPageProps) {
             })}
             {orders.length === 0 && (
               <div className="px-[1.1rem] py-10 text-center text-sm text-text-muted">
-                Không có đơn hàng nào có hoạt động trong ngày này.
+                {t("sagaLogs.orders.empty")}
               </div>
             )}
           </div>

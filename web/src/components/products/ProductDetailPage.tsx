@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { AddToCartModal } from "@/components/cart/AddToCartModal";
 import { ErrorState } from "@/components/common/ErrorState";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
@@ -10,7 +11,7 @@ import { useProduct } from "@/hooks/useProduct";
 import { cn } from "@/lib/cn";
 import { getColorSwatch } from "@/lib/format/color";
 import { formatPriceVnd } from "@/lib/format/price";
-import { formatFrameShapeVi, GENDER_TARGET_LABELS_VI } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 
 // The gallery images double as their own "no image / broken image" placeholder — same flat
 // grey box either way, so ImageWithFallback gets the one class string for both states.
@@ -25,14 +26,16 @@ interface ProductDetailPageProps {
 }
 
 export function ProductDetailPage({ id }: ProductDetailPageProps) {
+  const t = useTranslations("products");
+  const labels = useLabels();
   const { product, isLoading, error } = useProduct(id);
   const [isAddToCartOpen, setIsAddToCartOpen] = useState(false);
   // FR6/AC7: which swatch the customer picked, if any — drives which image group is shown below.
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
-  if (isLoading) return <LoadingState label="Đang tải sản phẩm..." />;
+  if (isLoading) return <LoadingState label={t("loading")} />;
   if (error) return <ErrorState message={error} />;
-  if (!product) return <ErrorState message="Không tìm thấy sản phẩm." />;
+  if (!product) return <ErrorState message={t("notFound")} />;
 
   // FR7: one swatch per distinct variant.color, in first-seen order — colorHex takes priority
   // over the legacy name->hex lookup (AC13: colorHex null falls back to getColorSwatch).
@@ -77,13 +80,13 @@ export function ProductDetailPage({ id }: ProductDetailPageProps) {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
-        Về trang danh mục
+        {t("detail.back")}
       </Link>
 
       <div className="flex flex-wrap gap-10">
-        <section aria-label="Hình ảnh sản phẩm" className="min-w-[260px] flex-[1_1_380px]">
+        <section aria-label={t("detail.imagesLabel")} className="min-w-[260px] flex-[1_1_380px]">
           {sortedImages.length === 0 ? (
-            <p className="my-[1em]">Chưa có hình ảnh nào.</p>
+            <p className="my-[1em]">{t("detail.noImages")}</p>
           ) : (
             <>
               {mainImage && (
@@ -118,7 +121,7 @@ export function ProductDetailPage({ id }: ProductDetailPageProps) {
           <h1 id="product-heading" className="my-[0.67em] text-[2em] font-bold">
             {product.name}
           </h1>
-          <p className="mb-4 text-[0.9rem] text-text-muted">{formatFrameShapeVi(product.frameShape)}</p>
+          <p className="mb-4 text-[0.9rem] text-text-muted">{labels.frameShape(product.frameShape)}</p>
           <p className="mb-5 text-2xl font-semibold">{formatPriceVnd(product.basePrice)}</p>
           {product.description && (
             <p className="mb-6 text-[0.95rem] leading-[1.65] text-text-secondary">{product.description}</p>
@@ -129,26 +132,26 @@ export function ProductDetailPage({ id }: ProductDetailPageProps) {
               they're kept as a compact secondary attributes list (same conservative call as the
               plan's own Q6 on the footer copyright line). */}
           <dl className="mb-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[0.85rem] text-text-secondary">
-            <dt className="font-semibold text-text-muted">Thương hiệu</dt>
+            <dt className="font-semibold text-text-muted">{t("detail.brand")}</dt>
             <dd>{product.brand.name}</dd>
-            <dt className="font-semibold text-text-muted">Danh mục</dt>
+            <dt className="font-semibold text-text-muted">{t("detail.category")}</dt>
             <dd>{product.category.name}</dd>
-            <dt className="font-semibold text-text-muted">Giới tính</dt>
-            <dd>{GENDER_TARGET_LABELS_VI[product.genderTarget]}</dd>
+            <dt className="font-semibold text-text-muted">{t("detail.gender")}</dt>
+            <dd>{labels.genderTarget(product.genderTarget)}</dd>
             {product.material && (
               <>
-                <dt className="font-semibold text-text-muted">Chất liệu</dt>
+                <dt className="font-semibold text-text-muted">{t("detail.material")}</dt>
                 <dd>{product.material}</dd>
               </>
             )}
           </dl>
 
-          <section aria-label="Màu sắc có sẵn">
+          <section aria-label={t("detail.colorsLabel")}>
             <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.06em] text-text-muted uppercase">
-              Màu gọng kính
+              {t("detail.frameColor")}
             </p>
             {colors.length === 0 ? (
-              <p className="my-[1em]">Chưa có phiên bản màu nào.</p>
+              <p className="my-[1em]">{t("detail.noColors")}</p>
             ) : (
               <ul className="mb-6 flex list-none flex-wrap gap-3 p-0">
                 {colors.map(({ color, hex, isKnown }) => {
@@ -183,17 +186,17 @@ export function ProductDetailPage({ id }: ProductDetailPageProps) {
             <Link
               href={`/products/${product.id}/try-on`}
               className={cn("btn btn-primary", DETAIL_ACTION_CLASS)}
-              aria-label="Thử kính AR"
+              aria-label={t("tryOnAr")}
             >
-              Thử kính AR
+              {t("tryOnAr")}
             </Link>
             <button
               type="button"
               className={cn("btn btn-outline", DETAIL_ACTION_CLASS)}
               onClick={() => setIsAddToCartOpen(true)}
-              aria-label="Thêm vào giỏ hàng"
+              aria-label={t("addToCart")}
             >
-              Thêm vào giỏ hàng
+              {t("addToCart")}
             </button>
           </div>
         </div>

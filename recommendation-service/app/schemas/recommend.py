@@ -88,4 +88,7 @@ class RecommendedProductDto(BaseModel):
 
 
 class RecommendResponse(BaseModel):
-    items: list[RecommendedProductDto]
+    """Success body for `POST /recommend` — the unified `{"data": [...]}` envelope. No
+    `meta`: this list isn't paginated (the caller's `limit` is a ranking cut-off, not a page)."""
+
+    data: list[RecommendedProductDto]

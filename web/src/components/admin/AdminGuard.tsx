@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { ApiError, getMyProfile } from "@/lib/api";
 import { getAccessToken, removeAccessToken } from "@/lib/auth/session";
 import type { UserProfile } from "@/types/user";
@@ -24,6 +25,7 @@ function canOpenPath(profile: UserProfile, pathname: string): boolean {
 }
 
 export function AdminGuard({ children }: { children: ReactNode }) {
+  const t = useTranslations("admin");
   const router = useRouter();
   const pathname = usePathname();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -38,12 +40,12 @@ export function AdminGuard({ children }: { children: ReactNode }) {
       }
 
       try {
-        const response = await getMyProfile(token);
-        if (!canOpenPath(response.data, pathname)) {
+        const currentProfile = await getMyProfile(token);
+        if (!canOpenPath(currentProfile, pathname)) {
           router.replace("/login");
           return;
         }
-        setProfile(response.data);
+        setProfile(currentProfile);
       } catch (error) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
           removeAccessToken();
@@ -60,7 +62,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
   if (checking) {
     return (
       <main className="grid min-h-screen max-w-none place-items-center bg-bg p-6 text-text-muted max-[900px]:px-4">
-        <p className="my-[1em]">Đang kiểm tra quyền quản trị...</p>
+        <p className="my-[1em]">{t("guard.checking")}</p>
       </main>
     );
   }

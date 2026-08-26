@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, deleteFaceAnalysisHistory, getFaceAnalysisHistory } from "@/lib/api";
+import { useTranslations } from "next-intl";
+import { deleteFaceAnalysisHistory, getFaceAnalysisHistory, useApiError } from "@/lib/api";
 import { ErrorState } from "@/components/common/ErrorState";
 import { ImageWithFallback } from "@/components/common/ImageWithFallback";
 import { LoadingState } from "@/components/common/LoadingState";
@@ -11,20 +12,21 @@ import { useFaceAnalysis } from "@/hooks/useFaceAnalysis";
 import { useStaticFaceOverlay } from "@/hooks/useStaticFaceOverlay";
 import { getAccessToken } from "@/lib/auth/session";
 import { cn } from "@/lib/cn";
-import { formatFaceShapeVi } from "@/lib/labels";
+import { useLabels } from "@/lib/labels";
 import { FaceCameraCapture } from "./FaceCameraCapture";
 import { RecommendationPreview } from "./RecommendationPreview";
 import type { FaceAnalysisResult, FaceMeasurements } from "@/types/face";
 import type { RecommendedProduct } from "@/types/recommendation";
 
-const MEASUREMENT_FIELDS: { key: keyof FaceMeasurements; label: string }[] = [
-  { key: "face_length", label: "Chiều dài khuôn mặt" },
-  { key: "forehead_width", label: "Chiều rộng trán" },
-  { key: "cheekbone_width", label: "Chiều rộng gò má" },
-  { key: "jaw_width", label: "Chiều rộng hàm" },
-  { key: "length_to_width_ratio", label: "Tỉ lệ dài / gò má" },
-  { key: "cheekbone_to_jaw_ratio", label: "Tỉ lệ gò má / hàm" },
-  { key: "forehead_to_jaw_ratio", label: "Tỉ lệ trán / hàm" },
+// Fixed display order; the label for each key lives under `face.measurements.<key>`.
+const MEASUREMENT_KEYS: (keyof FaceMeasurements)[] = [
+  "face_length",
+  "forehead_width",
+  "cheekbone_width",
+  "jaw_width",
+  "length_to_width_ratio",
+  "cheekbone_to_jaw_ratio",
+  "forehead_to_jaw_ratio",
 ];
 
 // Rough visual scale for the measurement bars only, not a calibrated metric — all 7 values are
@@ -50,15 +52,17 @@ const PHOTO_PLACEHOLDER_BG =
 // Shared between the current result and each history item — both render the same 7-field
 // measurement grid from a FaceMeasurements object.
 function MeasurementsGrid({ measurements }: { measurements: FaceMeasurements }) {
+  const t = useTranslations("face");
+
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-5 gap-y-3.5">
-      {MEASUREMENT_FIELDS.map(({ key, label }) => {
+      {MEASUREMENT_KEYS.map((key) => {
         const value = measurements[key];
         const pct = Math.min(100, Math.round((value / MEASUREMENT_BAR_MAX) * 100));
         return (
           <div key={key}>
             <div className="mb-1.5 flex items-baseline justify-between text-[0.875rem]">
-              <span className="text-[#3a322c]">{label}</span>
+              <span className="text-[#3a322c]">{t(`measurements.${key}`)}</span>
               <span className="font-semibold">{value.toFixed(3)}</span>
             </div>
             <div className="h-[5px] overflow-hidden rounded-[3px] bg-[rgba(43,36,32,0.08)]">
@@ -71,27 +75,27 @@ function MeasurementsGrid({ measurements }: { measurements: FaceMeasurements }) 
   );
 }
 
-// Vietnamese hints for the static-photo try-on overlay's non-"ready" statuses, mirroring
-// TryOnPage.tsx's STATUS_HINTS pattern for the live-camera case (FR3/AC4).
-const TRY_ON_STATUS_HINTS: Partial<Record<string, string>> = {
-  "loading-model": "Đang tải mô hình nhận diện khuôn mặt...",
-  detecting: "Đang nhận diện khuôn mặt trong ảnh...",
-};
-
-// Fixed Vietnamese label shown next to "Chọn tệp" for a camera-sourced photo — never a generated
-// filename, since that would be user-facing English text (AC12).
-const CAMERA_CAPTURE_FILE_LABEL = "Ảnh chụp từ camera";
-
 // Matches .design/Try Face Analysis.dc.html. Uploads a face photo (previewed locally while the
 // request is in flight), then shows the shape/confidence + measurements on success.
 // accept list mirrors ImageUploadSlot.tsx (image/jpeg,image/png,image/webp — NFR1).
 export function FaceAnalysisPage() {
+  const t = useTranslations("face");
+  const tCommon = useTranslations("common");
+  const labels = useLabels();
+  const translateError = useApiError();
+  // Hints for the static-photo try-on overlay's non-"ready" statuses, mirroring TryOnPage.tsx's
+  // pattern for the live-camera case (FR3/AC4). Built inside the component because the text comes
+  // from the translations.
+  const tryOnStatusHints: Partial<Record<string, string>> = {
+    "loading-model": t("overlay.loadingModel"),
+    detecting: t("overlay.detecting"),
+  };
   const router = useRouter();
   const { result, isLoading, error, analyze } = useFaceAnalysis();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  // Which of the two "Chọn ảnh" entry points is active — "camera" swaps the preview box for the
+  // Which of the two photo entry points is active — "camera" swaps the preview box for the
   // live camera capture flow and hides the file input so the two can't be triggered at once (T3).
   const [photoSource, setPhotoSource] = useState<"idle" | "camera">("idle");
 
@@ -106,7 +110,7 @@ export function FaceAnalysisPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Separate from `historyError` on purpose: `historyError` gates whether the whole history
   // list renders at all (see the JSX below), so a failed delete must not reuse it — that would
-  // hide every other item's "Xóa"/"Xem lại" button behind one error message.
+  // hide every other item's delete/view button behind one error message.
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // A clicked history item becomes the page's single active result (FR5) — takes precedence
@@ -177,7 +181,7 @@ export function FaceAnalysisPage() {
         if (!cancelled) setHistory(items);
       } catch (err) {
         if (!cancelled) {
-          setHistoryError(err instanceof ApiError ? err.message : "Không thể tải lịch sử phân tích của bạn.");
+          setHistoryError(translateError(err));
         }
       } finally {
         if (!cancelled) setHistoryLoading(false);
@@ -187,6 +191,8 @@ export function FaceAnalysisPage() {
     return () => {
       cancelled = true;
     };
+    // translateError is stable for a given locale; this fetch must stay a mount-only fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Revoke the local object URL once it's no longer the active preview (either replaced by a
@@ -208,14 +214,14 @@ export function FaceAnalysisPage() {
     await analyze(file);
   }
 
-  // Mirrors handleFileChange's pipeline, but the label is a fixed Vietnamese string rather than
-  // `file.name` — a generated camera-capture filename would be user-facing English text (AC12).
+  // Mirrors handleFileChange's pipeline, but the label is a fixed translated string rather than
+  // `file.name` — a generated camera-capture filename would be untranslated text (AC12).
   // photoSource flips back to "idle" right away (same moment previewUrl swaps in) so the preview
   // box immediately shows the captured photo the normal way, same as a file upload does (T3).
   async function handleCameraConfirm(file: File) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(URL.createObjectURL(file));
-    setFileName(CAMERA_CAPTURE_FILE_LABEL);
+    setFileName(t("upload.cameraFileLabel"));
     setPhotoSource("idle");
     await analyze(file);
   }
@@ -227,7 +233,7 @@ export function FaceAnalysisPage() {
   // Deletes one history item (AC1). Confirms first, then removes it from `history` on success and
   // clears `selectedHistoryItem` if that item was the one being previewed (AC6).
   async function handleDeleteHistoryItem(id: string) {
-    if (!window.confirm("Xóa kết quả phân tích này? Hành động này không thể hoàn tác.")) return;
+    if (!window.confirm(t("history.deleteConfirm"))) return;
 
     const token = getAccessToken();
     if (!token) return;
@@ -239,7 +245,7 @@ export function FaceAnalysisPage() {
       setHistory((prev) => prev.filter((item) => item.id !== id));
       setSelectedHistoryItem((prev) => (prev?.id === id ? null : prev));
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Không thể xóa kết quả phân tích này.");
+      setDeleteError(translateError(err));
     } finally {
       setDeletingId(null);
     }
@@ -252,7 +258,7 @@ export function FaceAnalysisPage() {
   const isLowConfidence = confidencePct !== null && confidencePct < 70;
 
   // Whether the top photo+recommendations row is showing — mirrors the condition that row is
-  // gated on below. When true, the "Chọn ảnh" card moves into that row's left column (instead of
+  // gated on below. When true, the photo-picker card moves into that row's left column (instead of
   // rendering full-width above everything) so the recommendations column sits beside the photo
   // itself, not below the shape/confidence/measurements info (which renders full-width below).
   const showResultLayout = !isLoading && !error && Boolean(activeResult);
@@ -301,11 +307,12 @@ export function FaceAnalysisPage() {
           id="face-analysis-heading"
           className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
         >
-          Phân tích khuôn mặt
+          {t("title")}
         </h1>
         <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
-          Vui lòng <Link href="/login">đăng nhập</Link> để tải ảnh lên và xem kết quả phân tích
-          dáng khuôn mặt của bạn.
+          {t.rich("loginPrompt", {
+            link: (chunks) => <Link href="/login">{chunks}</Link>,
+          })}
         </p>
       </section>
     );
@@ -317,16 +324,16 @@ export function FaceAnalysisPage() {
   // measurements list below it.
   const uploadCard = (
     <div className={cn(CARD_CLASS, showResultLayout ? "mb-0" : "mb-5")}>
-      <p className={SECTION_LABEL_CLASS}>Chọn ảnh</p>
+      <p className={SECTION_LABEL_CLASS}>{t("upload.sectionLabel")}</p>
       <div className="mb-[1.125rem] flex flex-wrap items-center gap-3">
         <label className="relative cursor-pointer overflow-hidden rounded-[2px] bg-text px-[1.125rem] py-2.5 text-[0.84rem] font-medium text-surface">
-          Chọn tệp
+          {t("upload.chooseFile")}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
             disabled={isLoading || photoSource === "camera"}
             onChange={handleFileChange}
-            aria-label="Tải lên ảnh khuôn mặt"
+            aria-label={t("upload.fileInputLabel")}
             className="absolute inset-0 cursor-pointer opacity-0"
           />
         </label>
@@ -336,9 +343,9 @@ export function FaceAnalysisPage() {
           disabled={isLoading || photoSource === "camera"}
           onClick={() => setPhotoSource("camera")}
         >
-          Chụp ảnh
+          {t("upload.takePhoto")}
         </button>
-        <span className="text-[0.84rem] text-text-muted">{fileName ?? "Chưa chọn tệp nào"}</span>
+        <span className="text-[0.84rem] text-text-muted">{fileName ?? t("upload.noFileChosen")}</span>
       </div>
       <div className="rounded-lg border-[1.5px] border-dashed border-[rgba(43,36,32,0.28)] p-2">
         {photoSource === "camera" ? (
@@ -355,13 +362,13 @@ export function FaceAnalysisPage() {
             ) : displayImageUrl ? (
               <ImageWithFallback
                 src={displayImageUrl}
-                alt="Ảnh khuôn mặt đã tải lên"
+                alt={t("upload.photoAlt")}
                 className="block h-full w-full object-cover"
                 placeholderClassName="block h-full w-full object-cover p-4 text-center text-[0.8rem] text-text-muted"
               />
             ) : (
               <p className="p-4 text-center text-[0.8rem] text-text-muted">
-                Kéo thả ảnh chân dung vào đây, hoặc bấm Chọn tệp
+                {t("upload.dropHint")}
               </p>
             )}
           </div>
@@ -373,7 +380,7 @@ export function FaceAnalysisPage() {
             <p role="status" className="text-[0.8rem] text-text-secondary">
               {overlayStatus === "no-face" || overlayStatus === "multiple-faces" || overlayStatus === "error"
                 ? overlayErrorMessage
-                : TRY_ON_STATUS_HINTS[overlayStatus]}
+                : tryOnStatusHints[overlayStatus]}
             </p>
           )}
           <button
@@ -381,7 +388,7 @@ export function FaceAnalysisPage() {
             className="btn btn-outline btn-small"
             onClick={() => setSelectedFrame(null)}
           >
-            Xem ảnh gốc
+            {t("upload.viewOriginal")}
           </button>
         </div>
       )}
@@ -397,7 +404,7 @@ export function FaceAnalysisPage() {
         >
           <path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-4z" />
         </svg>
-        Ảnh của bạn được lưu trữ riêng tư và chỉ dùng để phân tích dáng khuôn mặt.
+        {t("upload.privacyNote")}
       </p>
     </div>
   );
@@ -405,22 +412,21 @@ export function FaceAnalysisPage() {
   return (
     <section aria-labelledby="face-analysis-heading" className="mx-auto max-w-[1050px]">
       <p className="mb-[0.6rem] text-[0.8rem] font-semibold tracking-[0.1em] text-text-muted uppercase">
-        Công cụ phân tích
+        {t("eyebrow")}
       </p>
       <h1
         id="face-analysis-heading"
         className="mb-[0.6rem] font-heading text-[clamp(1.75rem,4vw,2.375rem)] font-semibold"
       >
-        Phân tích khuôn mặt
+        {t("title")}
       </h1>
       <p className="mb-7 text-[0.97rem] leading-[1.6] text-text-secondary">
-        Tải lên 1 ảnh chân dung để tìm dáng khuôn mặt và các số đo liên quan — dùng làm cơ sở để
-        gợi ý gọng kính phù hợp.
+        {t("intro")}
       </p>
 
       {!showResultLayout && uploadCard}
 
-      {isLoading && <LoadingState label="Đang phân tích ảnh của bạn..." />}
+      {isLoading && <LoadingState label={t("analyzing")} />}
       {!isLoading && error && <ErrorState message={error} />}
 
       {!isLoading && !error && activeResult && (
@@ -439,7 +445,7 @@ export function FaceAnalysisPage() {
                 ref={recommendCardRef}
                 style={{ maxHeight: recommendMaxHeight ?? undefined }}
               >
-                <p className={SECTION_LABEL_CLASS}>Gọng kính gợi ý cho bạn</p>
+                <p className={SECTION_LABEL_CLASS}>{t("result.recommendationsLabel")}</p>
                 <RecommendationPreview faceShape={activeResult.faceShape} onTryOnPhoto={setSelectedFrame} />
               </div>
             </div>
@@ -455,13 +461,13 @@ export function FaceAnalysisPage() {
               </svg>
             </div>
             <div className="min-w-[180px] flex-1">
-              <p className={RESULT_LABEL_CLASS}>Dáng khuôn mặt</p>
+              <p className={RESULT_LABEL_CLASS}>{t("result.faceShape")}</p>
               <p className="font-heading text-[1.4rem] font-semibold">
-                {formatFaceShapeVi(activeResult.faceShape)}
+                {labels.faceShape(activeResult.faceShape)}
               </p>
             </div>
             <div className="text-right">
-              <p className={RESULT_LABEL_CLASS}>Độ tin cậy</p>
+              <p className={RESULT_LABEL_CLASS}>{t("result.confidence")}</p>
               <p
                 className={cn(
                   "text-[1.4rem] font-semibold",
@@ -487,28 +493,25 @@ export function FaceAnalysisPage() {
                 <path d="M12 9v4M12 17h.01" />
                 <circle cx="12" cy="12" r="9" />
               </svg>
-              <span>
-                Độ tin cậy còn thấp — hãy thử 1 ảnh chụp thẳng, đủ sáng, không đội mũ hay đeo kính
-                để có kết quả chính xác hơn.
-              </span>
+              <span>{t("result.lowConfidenceHint")}</span>
             </div>
           )}
 
           <div className={cn(CARD_CLASS, "mb-5")}>
-            <p className={SECTION_LABEL_CLASS}>Số đo khuôn mặt</p>
+            <p className={SECTION_LABEL_CLASS}>{t("result.measurementsLabel")}</p>
             <MeasurementsGrid measurements={activeResult.measurements} />
           </div>
         </>
       )}
 
       <div className={cn(CARD_CLASS, "mb-5")}>
-        <p className={SECTION_LABEL_CLASS}>Lịch sử phân tích của bạn</p>
-        {historyLoading && <LoadingState label="Đang tải lịch sử phân tích của bạn..." />}
+        <p className={SECTION_LABEL_CLASS}>{t("history.title")}</p>
+        {historyLoading && <LoadingState label={t("history.loading")} />}
         {!historyLoading && historyError && <ErrorState message={historyError} />}
         {!historyLoading && !historyError && deleteError && <ErrorState message={deleteError} />}
         {!historyLoading && !historyError && history.length === 0 && (
           <p className="p-4 text-center text-[0.8rem] text-text-muted">
-            Bạn chưa phân tích ảnh nào.
+            {t("history.empty")}
           </p>
         )}
         {!historyLoading && !historyError && history.length > 0 && (
@@ -522,20 +525,20 @@ export function FaceAnalysisPage() {
                   <div className={cn("size-[72px] shrink-0 overflow-hidden rounded-lg", PHOTO_PLACEHOLDER_BG)}>
                     <ImageWithFallback
                       src={item.imageUrl}
-                      alt="Ảnh khuôn mặt đã phân tích trước đó"
+                      alt={t("history.itemPhotoAlt")}
                       className="block h-full w-full object-cover"
                       placeholderClassName="block h-full w-full object-cover"
                     />
                   </div>
                   <div className="flex min-w-0 flex-1 gap-6">
                     <div>
-                      <p className={RESULT_LABEL_CLASS}>Dáng khuôn mặt</p>
+                      <p className={RESULT_LABEL_CLASS}>{t("result.faceShape")}</p>
                       <p className="font-heading text-[1.05rem] font-semibold">
-                        {formatFaceShapeVi(item.faceShape)}
+                        {labels.faceShape(item.faceShape)}
                       </p>
                     </div>
                     <div>
-                      <p className={RESULT_LABEL_CLASS}>Độ tin cậy</p>
+                      <p className={RESULT_LABEL_CLASS}>{t("result.confidence")}</p>
                       <p className="font-heading text-[1.05rem] font-semibold">
                         {Math.round(item.confidence * 100)}%
                       </p>
@@ -546,7 +549,7 @@ export function FaceAnalysisPage() {
                     className="btn btn-outline btn-small"
                     onClick={() => setSelectedHistoryItem(item)}
                   >
-                    Xem lại
+                    {t("history.view")}
                   </button>
                   <button
                     type="button"
@@ -554,7 +557,7 @@ export function FaceAnalysisPage() {
                     onClick={() => handleDeleteHistoryItem(item.id)}
                     disabled={deletingId === item.id}
                   >
-                    {deletingId === item.id ? "Đang xóa..." : "Xóa"}
+                    {deletingId === item.id ? t("history.deleting") : tCommon("delete")}
                   </button>
                 </div>
               </div>

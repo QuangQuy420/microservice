@@ -30,6 +30,6 @@ export interface RecommendedProduct {
   score: number;
 }
 
-export interface RecommendResponse {
-  items: RecommendedProduct[];
-}
+// POST /recommendations now answers with the unified `{"data": [...]}` envelope, which apiFetch
+// unwraps — so the client function resolves to a plain array (no `items` wrapper any more).
+export type RecommendResponse = RecommendedProduct[];
